@@ -442,7 +442,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   right: {
     width: 260, minWidth: 260, background: "var(--surface)",
-    borderLeft: "1px solid var(--border)", padding: "28px 20px",
+    borderLeft: "1px solid var(--border)", padding: "56px 20px 28px",
     display: "flex", flexDirection: "column", gap: 16, overflowY: "auto",
   },
   sectionTitle: {

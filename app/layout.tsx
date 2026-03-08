@@ -19,13 +19,14 @@ export default async function RootLayout({
       <body suppressHydrationWarning>
         {session && (
           <div style={styles.topBar}>
-            <span style={styles.userEmail}>{session.user?.email}</span>
             <form
               action={async () => {
                 "use server";
                 await signOut({ redirectTo: "/login" });
               }}
+              style={{ display: "flex", alignItems: "center", gap: 10 }}
             >
+              <span style={styles.userEmail}>{session.user?.email}</span>
               <button type="submit" style={styles.logoutBtn}>
                 Déconnexion
               </button>
@@ -41,28 +42,37 @@ export default async function RootLayout({
 const styles: Record<string, React.CSSProperties> = {
   topBar: {
     position: "fixed",
-    top: 12,
-    right: 16,
+    top: 0,
+    right: 0,
+    width: 260,
     zIndex: 100,
     display: "flex",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "flex-end",
+    gap: 10,
+    padding: "10px 20px",
+    background: "var(--surface)",
+    borderBottom: "1px solid var(--border)",
+    borderLeft: "1px solid var(--border)",
   },
   userEmail: {
-    fontSize: 12,
+    fontSize: 11,
     color: "var(--text-muted)",
     fontFamily: "var(--font-mono)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   logoutBtn: {
-    fontSize: 12,
-    padding: "6px 14px",
+    fontSize: 11,
+    padding: "5px 12px",
     borderRadius: 50,
-    background: "var(--surface)",
+    background: "var(--surface2)",
     border: "1.5px solid var(--border)",
     color: "var(--text-muted)",
     cursor: "pointer",
     fontFamily: "var(--font-sans)",
-    boxShadow: "var(--shadow-sm)",
+    flexShrink: 0,
     transition: "border-color 0.15s, color 0.15s",
   },
 };
