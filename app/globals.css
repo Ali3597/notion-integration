@@ -135,6 +135,14 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.3;
 }
 
+/* ── Hub cards ── */
+
+a[href]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent) !important;
+}
+
 /* ── Buttons ── */
 
 .btn-primary:hover {

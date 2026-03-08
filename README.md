@@ -1,23 +1,48 @@
-Pomodoro × Notion
-App Pomodoro connectée à Notion. Lance des sessions chronométrées liées à tes projets et tâches.
+# notion×hub
 
-Installation
-bash
+Plateforme d'intégrations Notion. Connecte tes outils et apps favoris à Notion pour lire et pousser des données automatiquement.
+
+## Intégrations disponibles
+
+| Intégration | Route | Description |
+|-------------|-------|-------------|
+| Pomodoro | `/pomodoro` | Sessions de travail chronométrées liées aux projets et tâches Notion |
+
+## Installation
+
+```bash
 npm install
-Configuration
-Crée un fichier .env.local à la racine avec :
+```
 
-NOTION_TOKEN=secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-NOTION_PROJECTS_DB=31d4ceaf35ec80088347f73348cf98fe
-NOTION_TASKS_DB=31d4ceaf35ec80448becf56e3358478b
-NOTION_SESSIONS_DB=31d4ceaf35ec80499381d2a52afbc363
-Démarrer en local
-bash
-npm run dev
-Ouvre http://localhost:3000
+## Configuration
 
-Déployer sur Vercel
-Push ce repo sur GitHub
-Va sur vercel.com → New Project → importe le repo
-Dans les settings du projet → Environment Variables → ajoute les 4 variables
-Deploy !
+Crée un fichier `.env.local` à la racine :
+
+```
+NOTION_TOKEN=secret_...
+
+# Pomodoro
+NOTION_PROJECTS_DB=<database_id>
+NOTION_TASKS_DB=<database_id>
+NOTION_SESSIONS_DB=<database_id>
+```
+
+## Développement
+
+```bash
+npm run dev   # http://localhost:3000
+```
+
+## Déploiement (Vercel)
+
+1. Push sur GitHub
+2. Importe le repo sur [vercel.com](https://vercel.com)
+3. Ajoute les variables d'environnement dans les settings du projet
+4. Deploy
+
+## Ajouter une nouvelle intégration
+
+1. Crée la page : `app/<nom>/page.tsx`
+2. Crée les routes API : `app/api/<nom>/route.ts`
+3. Ajoute les types dans `types/index.ts`
+4. Référence l'intégration dans le tableau de `app/page.tsx`

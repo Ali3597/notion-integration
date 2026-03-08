@@ -3,8 +3,7 @@ import { notion, SESSIONS_DB } from "@/lib/notion";
 
 export async function POST(request: Request) {
   try {
-    const { taskId, startTime, endTime, durationMin, notes } =
-      await request.json();
+    const { taskId, startTime, endTime, notes } = await request.json();
 
     const now = new Date();
     const sessionName = `Session — ${now.toLocaleDateString("fr-FR", {
