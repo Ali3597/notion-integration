@@ -5,7 +5,8 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "Bash(ls:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(node:*)"
     ]
   }
 }

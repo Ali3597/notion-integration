@@ -8,7 +8,13 @@ const integrations = [
     description: "Sessions de travail chronométrées liées à tes projets et tâches Notion.",
     color: "var(--accent)",
   },
-  // Ajoute tes prochaines intégrations ici
+  {
+    href: "/petitbambou",
+    icon: "🎋",
+    title: "Petit Bambou",
+    description: "Sessions de méditation synchronisées depuis l'app Petit Bambou.",
+    color: "var(--accent2)",
+  },
 ];
 
 export default function HubPage() {
