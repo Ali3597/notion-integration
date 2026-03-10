@@ -655,12 +655,12 @@ function TabStats() {
         />
       </div>
 
-      {/* B) Durée moyenne par mois */}
+      {/* B) Durée totale par mois */}
       <div style={styles.card}>
-        <div style={styles.sectionTitle}>Durée moyenne par mois (min)</div>
+        <div style={styles.sectionTitle}>Durée totale par mois (min)</div>
         <BarChartVertical
           data={byMonthWithLabel}
-          valueKey="avg_duration"
+          valueKey="total_minutes"
           labelKey="monthLabel"
           color="var(--accent2)"
           unit="min"
