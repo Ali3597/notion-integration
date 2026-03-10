@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { NotionProject, NotionTask, NotionSession } from "@/types";
+import type { DBProject, DBTask, DBSession } from "@/types";
 
 type Mode = "work" | "break";
 
@@ -28,13 +28,11 @@ function formatDate(iso: string | null) {
 }
 
 export default function PomodoroPage() {
-  // Selectors
-  const [projects, setProjects] = useState<NotionProject[]>([]);
-  const [tasks, setTasks] = useState<NotionTask[]>([]);
+  const [projects, setProjects] = useState<DBProject[]>([]);
+  const [tasks, setTasks] = useState<DBTask[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [selectedTask, setSelectedTask] = useState<string>("");
 
-  // Timer config
   const [workMin, setWorkMin] = useState(25);
   const [breakMin, setBreakMin] = useState(5);
   const [mode, setMode] = useState<Mode>("work");
@@ -42,21 +40,18 @@ export default function PomodoroPage() {
   const [running, setRunning] = useState(false);
   const [sessionCount, setSessionCount] = useState(0);
 
-  // Session tracking
   const startTimeRef = useRef<string | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
-  // History
-  const [sessions, setSessions] = useState<NotionSession[]>([]);
+  const [sessions, setSessions] = useState<DBSession[]>([]);
+  const [todayStats, setTodayStats] = useState<{ session_count: number; total_minutes: number } | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingTasks, setLoadingTasks] = useState(false);
 
-  // Timer ref
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load projects
   useEffect(() => {
     fetch("/api/pomodoro/projects")
       .then((r) => r.json())
@@ -64,7 +59,6 @@ export default function PomodoroPage() {
       .catch(() => setLoadingProjects(false));
   }, []);
 
-  // Load tasks when project changes
   useEffect(() => {
     if (!selectedProject) { setTasks([]); setSelectedTask(""); return; }
     setLoadingTasks(true);
@@ -75,24 +69,23 @@ export default function PomodoroPage() {
       .catch(() => setLoadingTasks(false));
   }, [selectedProject]);
 
-  // Load sessions history
   const loadSessions = useCallback(() => {
     fetch("/api/pomodoro/sessions")
       .then((r) => r.json())
       .then((data) => setSessions(Array.isArray(data) ? data : []))
       .catch(() => {});
+    fetch("/api/pomodoro/today-stats")
+      .then((r) => r.json())
+      .then((data) => setTodayStats(data))
+      .catch(() => {});
   }, []);
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
-  // Reset timer when mode or duration changes
   useEffect(() => {
-    if (!running) {
-      setSecondsLeft(mode === "work" ? workMin * 60 : breakMin * 60);
-    }
+    if (!running) setSecondsLeft(mode === "work" ? workMin * 60 : breakMin * 60);
   }, [workMin, breakMin, mode, running]);
 
-  // Countdown
   useEffect(() => {
     if (running) {
       intervalRef.current = setInterval(() => {
@@ -189,7 +182,7 @@ export default function PomodoroPage() {
       <div style={styles.left}>
         <div style={styles.logo}>
           <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}>◉</span>
-          <span style={{ fontWeight: 600, letterSpacing: "0.05em" }}>pomodoro×notion</span>
+          <span style={{ fontWeight: 600, letterSpacing: "0.05em" }}>pomodoro</span>
         </div>
 
         <div style={styles.section}>
@@ -241,29 +234,33 @@ export default function PomodoroPage() {
           <div style={{ display: "flex", gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={styles.labelSmall}>Focus</div>
-              <input
-                type="number"
-                min={1} max={120}
-                value={workMin}
-                onChange={(e) => setWorkMin(Number(e.target.value))}
-              />
+              <input type="number" min={1} max={120} value={workMin}
+                onChange={(e) => setWorkMin(Number(e.target.value))} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={styles.labelSmall}>Pause</div>
-              <input
-                type="number"
-                min={1} max={60}
-                value={breakMin}
-                onChange={(e) => setBreakMin(Number(e.target.value))}
-              />
+              <input type="number" min={1} max={60} value={breakMin}
+                onChange={(e) => setBreakMin(Number(e.target.value))} />
             </div>
           </div>
         </div>
 
         <div style={styles.statsRow}>
+          {todayStats && (
+            <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
+              <div style={styles.stat}>
+                <span style={styles.statNum}>{todayStats.session_count}</span>
+                <span style={styles.statLabel}>aujourd'hui</span>
+              </div>
+              <div style={styles.stat}>
+                <span style={styles.statNum}>{todayStats.total_minutes}</span>
+                <span style={styles.statLabel}>min</span>
+              </div>
+            </div>
+          )}
           <div style={styles.stat}>
             <span style={styles.statNum}>{sessionCount}</span>
-            <span style={styles.statLabel}>sessions</span>
+            <span style={styles.statLabel}>cette session</span>
           </div>
           {lastSaved && (
             <div style={styles.stat}>
@@ -302,69 +299,94 @@ export default function PomodoroPage() {
         <div style={styles.timerWrapper}>
           <svg width={260} height={260} style={{ transform: "rotate(-90deg)" }}>
             <circle cx={130} cy={130} r={110} fill="none" stroke="var(--surface2)" strokeWidth={8} />
-            <circle
-              cx={130} cy={130} r={110}
-              fill="none"
-              stroke={modeColor}
-              strokeWidth={8}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDash}
-              style={{ transition: "stroke-dashoffset 0.5s ease, stroke 0.3s ease" }}
-            />
+            <circle cx={130} cy={130} r={110} fill="none" stroke={modeColor} strokeWidth={8}
+              strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={strokeDash}
+              style={{ transition: "stroke-dashoffset 0.5s ease, stroke 0.3s ease" }} />
           </svg>
           <div style={styles.timerInner}>
             <div style={{ ...styles.timerTime, color: modeColor }}>
               {pad(Math.floor(secondsLeft / 60))}:{pad(secondsLeft % 60)}
             </div>
             <div style={styles.timerMode}>{MODES[mode].label.toUpperCase()}</div>
-            {!selectedTask && (
-              <div style={styles.timerWarning}>Sélectionne une tâche</div>
-            )}
+            {!selectedTask && <div style={styles.timerWarning}>Sélectionne une tâche</div>}
           </div>
         </div>
 
         <div style={styles.controls}>
           <button onClick={handleReset} style={styles.btnSecondary} title="Reset">↺</button>
           {running ? (
-            <button onClick={handlePause} className="btn-primary" style={{ ...styles.btnPrimary, background: modeColor }}>
+            <button onClick={handlePause} className="btn-primary"
+              style={{ ...styles.btnPrimary, background: modeColor }}>
               ⏸ Pause
             </button>
           ) : (
-            <button
-              onClick={handleStart}
-              className="btn-primary"
+            <button onClick={handleStart} className="btn-primary"
               style={{
                 ...styles.btnPrimary,
                 background: selectedTask ? modeColor : "var(--border)",
                 boxShadow: selectedTask ? "0 4px 14px rgba(59, 126, 248, 0.35), 0 1px 3px rgba(0,0,0,0.1)" : "none",
                 color: selectedTask ? "#ffffff" : "var(--text-muted)",
                 cursor: selectedTask ? "pointer" : "not-allowed",
-              }}
-            >
+              }}>
               ▶ Start
             </button>
           )}
           <button onClick={handleSkip} style={styles.btnSecondary} title="Passer">⏭</button>
         </div>
+
+        {/* Today's sessions table */}
+        {sessions.length > 0 && (
+          <div style={styles.sessionsTable}>
+            <div style={styles.sectionTitle}>Dernières sessions</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Tâche</th>
+                    <th style={styles.th}>Projet</th>
+                    <th style={styles.th}>Début</th>
+                    <th style={{ ...styles.th, textAlign: "right" }}>Durée</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((s) => (
+                    <tr key={s.id} style={styles.tr}>
+                      <td style={styles.td}>{s.task_name ?? s.name ?? "—"}</td>
+                      <td style={styles.td}>{s.project_name ?? "—"}</td>
+                      <td style={styles.td}>{formatDate(s.start_time)}</td>
+                      <td style={{ ...styles.td, textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--accent)" }}>
+                        {formatDuration(s.duration_min)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Right panel — History */}
+      {/* Right panel — session cards */}
       <div style={styles.right}>
-        <div style={styles.sectionTitle}>Dernières sessions</div>
+        <div style={styles.sectionTitle}>Sessions récentes</div>
         {sessions.length === 0 ? (
           <div style={styles.empty}>Aucune session encore</div>
         ) : (
           <div style={styles.sessionList}>
             {sessions.map((s) => (
               <div key={s.id} style={styles.sessionCard}>
-                <div style={styles.sessionName}>{s.name}</div>
+                <div style={styles.sessionName}>{s.task_name ?? s.name ?? "Session"}</div>
                 <div style={styles.sessionMeta}>
-                  <span>{formatDate(s.startTime)}</span>
+                  <span>{formatDate(s.start_time)}</span>
                   <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
-                    {formatDuration(s.duration)}
+                    {formatDuration(s.duration_min)}
                   </span>
                 </div>
+                {s.project_name && (
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+                    {s.project_name}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -405,7 +427,7 @@ const styles: Record<string, React.CSSProperties> = {
   statLabel: { fontSize: 12, color: "var(--text-muted)" },
   center: {
     flex: 1, display: "flex", flexDirection: "column",
-    alignItems: "center", justifyContent: "center", gap: 32, padding: 48,
+    alignItems: "center", justifyContent: "flex-start", gap: 32, padding: 48, paddingTop: 48,
   },
   modeTabs: {
     display: "flex", gap: 8, background: "var(--surface)",
@@ -461,4 +483,18 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
   },
   sessionMeta: { display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)" },
+  sessionsTable: {
+    width: "100%", maxWidth: 700,
+    background: "var(--surface)", border: "1px solid var(--border)",
+    borderRadius: 12, padding: "20px 24px",
+    display: "flex", flexDirection: "column", gap: 12,
+  },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  th: {
+    textAlign: "left", padding: "8px 12px", fontSize: 10,
+    fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase",
+    color: "var(--text-muted)", borderBottom: "1px solid var(--border)",
+  },
+  tr: { borderBottom: "1px solid var(--border)" },
+  td: { padding: "10px 12px", color: "var(--text)", verticalAlign: "top" },
 };

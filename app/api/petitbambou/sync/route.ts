@@ -1,55 +1,79 @@
 import { NextResponse } from "next/server";
-import { getSessionsLastWeek, getSessionsLast3Months, getAllSessions, getTodaySessions } from "@/lib/petitbambou";
-import { MEDITATIONS_DB, setupMeditationsDB, cleanupMeditationsDBSchema, pushMeditationSessions } from "@/lib/notion";
-import { computeStatsFromNotion, updateStatsCallouts } from "@/lib/notion-stats";
+import {
+  getSessionsLastWeek,
+  getSessionsLast3Months,
+  getAllSessions,
+  getTodaySessions,
+  computeStreaks,
+} from "@/lib/petitbambou";
+import { db } from "@/lib/db";
+import { meditations } from "@/lib/schema";
+import { inArray, sql } from "drizzle-orm";
+import type { PBSession } from "@/types";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const mode: "recent" | "all" | "today" | "week" = body.mode ?? "recent";
-    const parentPageId: string | undefined = body.parentPageId;
 
-    let dbId = MEDITATIONS_DB;
-    let dbCreated = false;
-
-    if (!dbId) {
-      if (!parentPageId) {
-        return NextResponse.json(
-          { error: "NOTION_MEDITATIONS_DB non configuré. Fournis un parentPageId pour créer la DB." },
-          { status: 400 }
-        );
-      }
-      dbId = await setupMeditationsDB(parentPageId);
-      dbCreated = true;
-    }
-
-    await cleanupMeditationsDBSchema(dbId);
-
-    let sessions: Awaited<ReturnType<typeof getTodaySessions>>;
+    let pbSessions: PBSession[];
     if (mode === "all") {
-      sessions = await getAllSessions();
+      pbSessions = await getAllSessions();
     } else if (mode === "today") {
-      sessions = await getTodaySessions();
+      pbSessions = await getTodaySessions();
     } else if (mode === "week") {
-      sessions = await getSessionsLastWeek();
+      pbSessions = await getSessionsLastWeek();
     } else {
-      sessions = await getSessionsLast3Months();
+      pbSessions = await getSessionsLast3Months();
     }
 
-    const { pushed, errors } = await pushMeditationSessions(sessions, dbId);
+    // Get existing UUIDs from DB to avoid duplicates
+    const uuids = pbSessions.map((s) => s.uuid);
+    const existingRows = uuids.length
+      ? await db
+          .select({ pb_uuid: meditations.pb_uuid, date: meditations.date })
+          .from(meditations)
+          .where(inArray(meditations.pb_uuid, uuids))
+      : [];
+    const existingUUIDs = new Set(existingRows.map((r) => r.pb_uuid!));
 
-    try {
-      const stats = await computeStatsFromNotion(dbId);
-      await updateStatsCallouts(stats);
-    } catch {
-      // Non-bloquant — ne pas faire échouer la sync si la mise à jour des stats échoue
+    // Also fetch all existing for streak computation
+    const allExisting = await db
+      .select({ pb_uuid: meditations.pb_uuid, date: meditations.date })
+      .from(meditations);
+
+    const toCreate = pbSessions.filter((s) => !existingUUIDs.has(s.uuid));
+
+    // Merge for streak computation
+    const allForStreak = [
+      ...allExisting
+        .filter((r) => r.pb_uuid && r.date)
+        .map((r) => ({ uuid: r.pb_uuid!, activity_date: r.date!.toISOString().substring(0, 10) + " 00:00:00" })),
+      ...toCreate.map((s) => ({ uuid: s.uuid, activity_date: s.activity_date })),
+    ];
+    const streakMap = computeStreaks(allForStreak);
+
+    let pushed = 0;
+    let errors = 0;
+
+    for (const s of toCreate) {
+      try {
+        const durationMin = Math.round(s.duration / 60);
+        const date = new Date(parseInt(s.activity_time, 10) * 1000);
+        await db.insert(meditations).values({
+          lesson: s.lesson_name,
+          date,
+          duration_min: String(durationMin),
+          pb_uuid: s.uuid,
+          streak: streakMap.get(s.uuid) ?? 1,
+        });
+        pushed++;
+      } catch {
+        errors++;
+      }
     }
 
-    return NextResponse.json({
-      pushed,
-      errors,
-      ...(dbCreated ? { dbCreated: true, dbId } : {}),
-    });
+    return NextResponse.json({ pushed, errors });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Erreur sync Petit Bambou" }, { status: 500 });

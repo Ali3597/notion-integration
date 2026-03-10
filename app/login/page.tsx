@@ -14,8 +14,8 @@ export default async function LoginPage({ searchParams }: Props) {
   return (
     <main style={styles.main}>
       <div style={styles.card}>
-        <div style={styles.logo}>notion×hub</div>
-        <p style={styles.tagline}>Tes intégrations Notion, centralisées.</p>
+        <div style={styles.logo}>life×hub</div>
+        <p style={styles.tagline}>Ton hub de productivité en local.</p>
 
         {isUnauthorized && (
           <div style={styles.errorBox}>

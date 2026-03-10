@@ -4,10 +4,10 @@ import { auth, signOut } from "@/auth";
 
 export const metadata: Metadata = {
   title: {
-    template: "%s — notion×hub",
-    default: "notion×hub",
+    template: "%s — life×hub",
+    default: "life×hub",
   },
-  description: "Tes intégrations Notion, centralisées.",
+  description: "Ton hub de productivité en local.",
 };
 
 export default async function RootLayout({

@@ -1,11 +1,28 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 const integrations = [
   {
     href: "/pomodoro",
     icon: "◉",
     title: "Pomodoro",
-    description: "Sessions de travail chronométrées liées à tes projets et tâches Notion.",
+    description: "Sessions de travail chronométrées liées à tes projets et tâches.",
+    color: "var(--accent)",
+  },
+  {
+    href: "/projects",
+    icon: "▦",
+    title: "Projets",
+    description: "Vue tableau de tous tes projets avec stats de sessions agrégées.",
+    color: "var(--accent)",
+  },
+  {
+    href: "/tasks",
+    icon: "✓",
+    title: "Tâches",
+    description: "Toutes les tâches filtrables par statut, priorité et projet.",
     color: "var(--accent)",
   },
   {
@@ -15,15 +32,64 @@ const integrations = [
     description: "Sessions de méditation synchronisées depuis l'app Petit Bambou.",
     color: "var(--accent2)",
   },
+  {
+    href: "/chess",
+    icon: "♟️",
+    title: "Chess.com",
+    description: "Suivi de progression, ouvertures et records depuis Chess.com.",
+    color: "var(--accent)",
+  },
 ];
 
+interface Overview {
+  projects: { total: number; active: number };
+  tasks: { total: number; in_progress: number };
+  today: { session_count: number; total_minutes: number };
+  lastMeditation: { lesson: string | null; date: string | null; streak: number | null } | null;
+}
+
 export default function HubPage() {
+  const [overview, setOverview] = useState<Overview | null>(null);
+
+  useEffect(() => {
+    fetch("/api/overview")
+      .then((r) => r.json())
+      .then((d) => { if (!d.error) setOverview(d); })
+      .catch(() => {});
+  }, []);
+
   return (
     <main style={styles.main}>
       <div style={styles.header}>
-        <div style={styles.logo}>notion×hub</div>
-        <p style={styles.subtitle}>Tes intégrations Notion en un seul endroit.</p>
+        <div style={styles.logo}>life×hub</div>
+        <p style={styles.subtitle}>Tes outils de productivité en local.</p>
       </div>
+
+      {/* Overview */}
+      {overview && (
+        <div style={styles.overview}>
+          <OverviewCard
+            label="Projets actifs"
+            value={`${overview.projects.active} / ${overview.projects.total}`}
+          />
+          <OverviewCard
+            label="Tâches en cours"
+            value={`${overview.tasks.in_progress} / ${overview.tasks.total}`}
+          />
+          <OverviewCard
+            label="Sessions aujourd'hui"
+            value={String(overview.today.session_count)}
+            sub={overview.today.total_minutes > 0 ? `${overview.today.total_minutes} min` : undefined}
+          />
+          <OverviewCard
+            label="Dernière méditation"
+            value={overview.lastMeditation
+              ? new Date(overview.lastMeditation.date!).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
+              : "—"}
+            sub={overview.lastMeditation?.streak ? `Streak : ${overview.lastMeditation.streak} j` : undefined}
+          />
+        </div>
+      )}
 
       <div style={styles.grid}>
         {integrations.map((item) => (
@@ -38,69 +104,60 @@ export default function HubPage() {
   );
 }
 
+function OverviewCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={overviewStyles.card}>
+      <div style={overviewStyles.value}>{value}</div>
+      <div style={overviewStyles.label}>{label}</div>
+      {sub && <div style={overviewStyles.sub}>{sub}</div>}
+    </div>
+  );
+}
+
+const overviewStyles: Record<string, React.CSSProperties> = {
+  card: {
+    background: "var(--surface)", border: "1.5px solid var(--border)",
+    borderRadius: 12, padding: "16px 20px", minWidth: 140,
+    display: "flex", flexDirection: "column", gap: 4,
+    boxShadow: "var(--shadow-sm)",
+  },
+  value: {
+    fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--accent)",
+  },
+  label: { fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" },
+  sub: { fontSize: 11, color: "var(--text-muted)" },
+};
+
 const styles: Record<string, React.CSSProperties> = {
   main: {
-    minHeight: "100vh",
-    background: "var(--bg)",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "48px 24px",
-    gap: 48,
+    minHeight: "100vh", background: "var(--bg)",
+    display: "flex", flexDirection: "column",
+    alignItems: "center", justifyContent: "center",
+    padding: "48px 24px", gap: 40,
   },
-  header: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 12,
-  },
+  header: { display: "flex", flexDirection: "column", alignItems: "center", gap: 12 },
   logo: {
-    fontFamily: "var(--font-mono)",
-    fontSize: 28,
-    fontWeight: 700,
-    color: "var(--text)",
-    letterSpacing: "-0.02em",
+    fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700,
+    color: "var(--text)", letterSpacing: "-0.02em",
   },
-  subtitle: {
-    fontSize: 15,
-    color: "var(--text-muted)",
-    textAlign: "center",
+  subtitle: { fontSize: 15, color: "var(--text-muted)", textAlign: "center" },
+  overview: {
+    display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center",
   },
   grid: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 20,
-    justifyContent: "center",
-    maxWidth: 800,
+    display: "flex", flexWrap: "wrap", gap: 20,
+    justifyContent: "center", maxWidth: 860,
   },
   card: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    background: "var(--surface)",
-    border: "1.5px solid var(--border)",
-    borderRadius: 16,
-    padding: "28px 32px",
-    width: 240,
-    textDecoration: "none",
-    color: "inherit",
+    display: "flex", flexDirection: "column", gap: 12,
+    background: "var(--surface)", border: "1.5px solid var(--border)",
+    borderRadius: 16, padding: "28px 32px", width: 240,
+    textDecoration: "none", color: "inherit",
     boxShadow: "var(--shadow-md)",
     transition: "transform 0.18s, box-shadow 0.18s, border-color 0.18s",
     cursor: "pointer",
   },
-  cardIcon: {
-    fontFamily: "var(--font-mono)",
-    fontSize: 28,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: 700,
-    color: "var(--text)",
-  },
-  cardDesc: {
-    fontSize: 13,
-    color: "var(--text-muted)",
-    lineHeight: 1.5,
-  },
+  cardIcon: { fontFamily: "var(--font-mono)", fontSize: 28 },
+  cardTitle: { fontSize: 17, fontWeight: 700, color: "var(--text)" },
+  cardDesc: { fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 },
 };

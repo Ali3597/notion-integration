@@ -7,7 +7,20 @@
       "Bash(ls:*)",
       "Bash(git:*)",
       "Bash(node:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(chmod +x /Users/alisaleh/Documents/code/Notion/pomodoro-notion/scripts/setup.sh)",
+      "Bash(createdb notion_hub 2>/dev/null; echo \"DB ready\")",
+      "Bash(DATABASE_URL=postgresql://localhost:5432/notion_hub npx drizzle-kit push 2>&1)",
+      "Bash(psql postgres:*)",
+      "Read(//opt/homebrew/opt/**)",
+      "Read(//usr/local/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\" && psql postgres -c \"CREATE DATABASE notion_hub;\" 2>&1)",
+      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\" && DATABASE_URL=postgresql://localhost:5432/notion_hub npx drizzle-kit push 2>&1)",
+      "Bash(DATABASE_URL=postgresql://localhost:5432/notion_hub npx next build 2>&1 | tail -30)",
+      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\" && psql postgres -c \"CREATE DATABASE lifehub;\" 2>&1)",
+      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\" && DATABASE_URL=postgresql://localhost:5432/lifehub npx drizzle-kit push 2>&1)",
+      "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\" && psql postgres -c \"DROP DATABASE notion_hub;\" 2>&1)"
     ]
   }
 }
