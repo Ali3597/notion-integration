@@ -24,6 +24,7 @@ NOTION_SESSIONS_DB=<database_id>
 
 # Petit Bambou
 NOTION_MEDITATIONS_DB=<database_id>   # auto-créé au premier lancement si absent
+NOTION_STATS_PAGE_ID=<page_id>        # page Notion contenant les 4 callouts de stats (optionnel)
 PB_USER_UUID=<uuid utilisateur PB>
 PB_AUTH_TOKEN=<token JWT issu de l'app mobile PB>
 
@@ -58,16 +59,21 @@ app/
       tasks/route.ts              # GET ?projectId= — query Tasks filtered by project
       sessions/route.ts           # GET — last 10 sessions / POST — create session
     petitbambou/
-      stats/route.ts              # GET — metrics + dernières sessions PB + dbConfigured flag
+      stats/route.ts              # GET — metrics PB API + 10 dernières sessions + dbConfigured flag
       sync/route.ts               # POST { mode: "today"|"week"|"recent"|"all", parentPageId? }
+                                  #   → push sessions + calcule streaks + met à jour callouts Stats
       cleanup/route.ts            # POST — supprime les doublons Notion par PB_UUID
+      recompute-streaks/route.ts  # POST — recalcule et écrit la colonne Streak sur toutes les pages
 auth.ts                           # NextAuth config: Google provider, allowed email whitelist
 middleware.ts                     # Redirects unauthenticated users to /login for all routes
 lib/
-  notion.ts                       # Shared Notion client + DB ID constants (from env)
-  petitbambou.ts                  # Client API Petit Bambou (headers custom, fetch sessions/metrics)
+  notion.ts                       # Shared Notion client + DB ID constants + pushMeditationSessions
+                                  #   ensurePBUUIDColumn, ensureStreakColumn, deduplicateMeditations
+  petitbambou.ts                  # Client API Petit Bambou + computeStreaks
+  notion-stats.ts                 # computeStatsFromNotion + updateStatsCallouts (callouts Notion)
 types/
-  index.ts                        # Shared TypeScript types: NotionProject, NotionTask, NotionSession, PBSession, PBMetrics
+  index.ts                        # Shared TypeScript types: NotionProject, NotionTask, NotionSession,
+                                  #   PBSession, PBMetrics
 ```
 
 ## Adding a New Integration
@@ -86,9 +92,11 @@ types/
 - **Sessions**: `Name` (title), `Task` (relation → Tasks), `Start Time` (date), `End Time` (date), `Notes` (rich_text), `Duration (min)` (formula)
 
 ### Petit Bambou (Méditations)
-- **Leçon** (title), **Date** (date — UTC, dérivée de `activity_time` unix), **Durée (min)** (number), **PB_UUID** (rich_text — identifiant unique de session, clé de déduplication)
-- La colonne `PB_UUID` est créée automatiquement par `ensurePBUUIDColumn()` si absente
+- **Leçon** (title), **Date** (date — UTC, dérivée de `activity_time` unix), **Durée (min)** (number), **PB_UUID** (rich_text — clé de déduplication), **Streak** (number — jours consécutifs)
+- `PB_UUID` et `Streak` sont créés automatiquement par `ensurePBUUIDColumn()` / `ensureStreakColumn()` si absents
 - Déduplication : à chaque sync, les UUIDs déjà présents dans Notion sont récupérés et filtrés — aucun doublon possible
+- Streak : calculé par `computeStreaks()` dans `lib/petitbambou.ts` — tolérance d'1 jour manqué (gap ≤ 2 jours = streak continue, ≥ 3 jours = reset)
+- Après chaque sync, `computeStatsFromNotion()` recalcule les stats depuis Notion et `updateStatsCallouts()` met à jour 4 callouts (🏆 🔥 ⏱️ 🧘) sur la page `NOTION_STATS_PAGE_ID`
 
 ## Authentication
 
