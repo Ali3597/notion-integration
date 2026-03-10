@@ -3,7 +3,10 @@ import "./globals.css";
 import { auth, signOut } from "@/auth";
 
 export const metadata: Metadata = {
-  title: "notion×hub",
+  title: {
+    template: "%s — notion×hub",
+    default: "notion×hub",
+  },
   description: "Tes intégrations Notion, centralisées.",
 };
 

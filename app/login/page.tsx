@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { signIn } from "@/auth";
+
+export const metadata: Metadata = { title: "Connexion" };
 
 type Props = {
   searchParams: Promise<{ error?: string }>;

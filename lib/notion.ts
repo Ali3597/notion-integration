@@ -1,5 +1,6 @@
 import { Client } from "@notionhq/client";
 import type { PBSession } from "@/types";
+import { computeStreaks } from "@/lib/petitbambou";
 
 export const notion = new Client({
   auth: process.env.NOTION_TOKEN,
@@ -37,6 +38,17 @@ export async function cleanupMeditationsDBSchema(dbId: string): Promise<void> {
   }
 }
 
+// Ajoute la colonne Streak si elle n'existe pas encore (idempotent)
+export async function ensureStreakColumn(dbId: string): Promise<void> {
+  const db = await notion.databases.retrieve({ database_id: dbId });
+  if (!(db as any).properties["Streak"]) {
+    await notion.databases.update({
+      database_id: dbId,
+      properties: { Streak: { number: {} } },
+    });
+  }
+}
+
 // Ajoute la colonne PB_UUID si elle n'existe pas encore (idempotent)
 export async function ensurePBUUIDColumn(dbId: string): Promise<void> {
   const db = await notion.databases.retrieve({ database_id: dbId });
@@ -64,9 +76,11 @@ async function fetchAllPages(dbId: string): Promise<any[]> {
   return pages;
 }
 
-// Récupère les PB_UUID déjà présents dans Notion (pour déduplication)
-async function getExistingPBUUIDs(dbId: string): Promise<Set<string>> {
-  const existing = new Set<string>();
+// Récupère les sessions existantes dans Notion (uuid + activity_date) pour calcul de streak
+export async function getExistingSessionsFromNotion(
+  dbId: string
+): Promise<Array<{ uuid: string; activity_date: string }>> {
+  const sessions: Array<{ uuid: string; activity_date: string }> = [];
   let cursor: string | undefined;
   do {
     const res: any = await notion.databases.query({
@@ -77,11 +91,16 @@ async function getExistingPBUUIDs(dbId: string): Promise<Set<string>> {
     });
     for (const page of res.results) {
       const uuid = page.properties?.PB_UUID?.rich_text?.[0]?.plain_text;
-      if (uuid) existing.add(uuid);
+      const isoDate: string | undefined = page.properties?.Date?.date?.start;
+      if (uuid && isoDate) {
+        // Convertir ISO → "YYYY-MM-DD 00:00:00" pour que substring(0,10) donne la bonne date
+        const datePart = isoDate.substring(0, 10);
+        sessions.push({ uuid, activity_date: `${datePart} 00:00:00` });
+      }
     }
     cursor = res.has_more ? res.next_cursor : undefined;
   } while (cursor);
-  return existing;
+  return sessions;
 }
 
 export async function pushMeditationSessions(
@@ -89,9 +108,20 @@ export async function pushMeditationSessions(
   dbId: string
 ): Promise<{ pushed: number; errors: number }> {
   await ensurePBUUIDColumn(dbId);
+  await ensureStreakColumn(dbId);
 
-  const existingUUIDs = await getExistingPBUUIDs(dbId);
+  // Récupère les sessions existantes pour calculer les streaks sur l'historique complet
+  const existingSessions = await getExistingSessionsFromNotion(dbId);
+  const existingUUIDs = new Set(existingSessions.map((s) => s.uuid));
+
   const toCreate = sessions.filter((s) => !existingUUIDs.has(s.uuid));
+
+  // Fusionner tout l'historique pour calculer les streaks correctement
+  const allSessions = [
+    ...existingSessions,
+    ...toCreate.map((s) => ({ uuid: s.uuid, activity_date: s.activity_date })),
+  ];
+  const streakMap = computeStreaks(allSessions);
 
   let pushed = 0;
   let errors = 0;
@@ -108,6 +138,7 @@ export async function pushMeditationSessions(
           Date: { date: { start: isoDate } },
           "Durée (min)": { number: durationMin },
           PB_UUID: { rich_text: [{ text: { content: s.uuid } }] },
+          Streak: { number: streakMap.get(s.uuid) ?? 1 },
         },
       });
       pushed++;

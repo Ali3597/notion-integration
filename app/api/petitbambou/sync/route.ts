@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionsLastWeek, getSessionsLast3Months, getAllSessions, getTodaySessions } from "@/lib/petitbambou";
 import { MEDITATIONS_DB, setupMeditationsDB, cleanupMeditationsDBSchema, pushMeditationSessions } from "@/lib/notion";
+import { computeStatsFromNotion, updateStatsCallouts } from "@/lib/notion-stats";
 
 export async function POST(request: Request) {
   try {
@@ -36,6 +37,13 @@ export async function POST(request: Request) {
     }
 
     const { pushed, errors } = await pushMeditationSessions(sessions, dbId);
+
+    try {
+      const stats = await computeStatsFromNotion(dbId);
+      await updateStatsCallouts(stats);
+    } catch {
+      // Non-bloquant — ne pas faire échouer la sync si la mise à jour des stats échoue
+    }
 
     return NextResponse.json({
       pushed,

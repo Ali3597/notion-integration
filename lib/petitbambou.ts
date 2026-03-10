@@ -114,3 +114,52 @@ export async function getTodaySessions(): Promise<PBSession[]> {
   const today = new Date();
   return getSessionsForPeriod(today, today);
 }
+
+export function computeStreaks(
+  sessions: Array<{ uuid: string; activity_date: string }>
+): Map<string, number> {
+  const streakMap = new Map<string, number>();
+  if (sessions.length === 0) return streakMap;
+
+  // Extraire les dates uniques YYYY-MM-DD
+  const dateSet = new Set<string>();
+  for (const s of sessions) {
+    dateSet.add(s.activity_date.substring(0, 10));
+  }
+
+  // Trier chronologiquement
+  const sortedDates = Array.from(dateSet).sort();
+
+  // Calculer la streak pour chaque date
+  const dateStreakMap = new Map<string, number>();
+
+  for (let i = 0; i < sortedDates.length; i++) {
+    if (i === 0) {
+      dateStreakMap.set(sortedDates[i], 1);
+      continue;
+    }
+
+    const currentDate = new Date(sortedDates[i]);
+    const prevDate = new Date(sortedDates[i - 1]);
+
+    const gapDays = Math.round(
+      (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (gapDays <= 2) {
+      // 0, 1 ou 2 jours d'écart (0 ou 1 jour manqué) → streak continue
+      dateStreakMap.set(sortedDates[i], (dateStreakMap.get(sortedDates[i - 1]) ?? 1) + 1);
+    } else {
+      // 3 jours d'écart ou plus (2 jours manqués) → RESET
+      dateStreakMap.set(sortedDates[i], 1);
+    }
+  }
+
+  // Assigner la streak à chaque session selon sa date
+  for (const s of sessions) {
+    const date = s.activity_date.substring(0, 10);
+    streakMap.set(s.uuid, dateStreakMap.get(date) ?? 1);
+  }
+
+  return streakMap;
+}

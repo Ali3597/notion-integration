@@ -40,6 +40,10 @@ export default function PetitBambouPage() {
   const [cleanResult, setCleanResult] = useState<{ removed: number } | null>(null);
   const [cleanError, setCleanError] = useState<string | null>(null);
 
+  const [recomputing, setRecomputing] = useState(false);
+  const [recomputeResult, setRecomputeResult] = useState<{ updated: number } | null>(null);
+  const [recomputeError, setRecomputeError] = useState<string | null>(null);
+
   // Premier lancement
   const [dbConfigured, setDbConfigured] = useState(true);
   const [parentPageId, setParentPageId] = useState("");
@@ -115,6 +119,21 @@ export default function PetitBambouPage() {
       setCleanError("Erreur réseau.");
     }
     setCleaning(false);
+  }
+
+  async function handleRecomputeStreaks() {
+    setRecomputing(true);
+    setRecomputeResult(null);
+    setRecomputeError(null);
+    try {
+      const res = await fetch("/api/petitbambou/recompute-streaks", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) setRecomputeError(data.error ?? "Erreur");
+      else setRecomputeResult(data);
+    } catch {
+      setRecomputeError("Erreur réseau.");
+    }
+    setRecomputing(false);
   }
 
   async function handleCreateDb() {
@@ -267,6 +286,21 @@ export default function PetitBambouPage() {
               )}
               {cleanError && <span style={styles.error}>{cleanError}</span>}
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const }}>
+              <button
+                style={{ ...styles.btnSecondary, opacity: (!dbConfigured || recomputing) ? 0.5 : 1 }}
+                onClick={handleRecomputeStreaks}
+                disabled={recomputing || !dbConfigured}
+              >
+                {recomputing ? "Calcul en cours..." : "🔄 Recalculer les streaks"}
+              </button>
+              {recomputeResult && (
+                <span style={styles.syncSuccess}>
+                  ✓ {recomputeResult.updated} session{recomputeResult.updated !== 1 ? "s" : ""} mise{recomputeResult.updated !== 1 ? "s" : ""} à jour
+                </span>
+              )}
+              {recomputeError && <span style={styles.error}>{recomputeError}</span>}
+            </div>
           </div>
         </div>
 
@@ -289,7 +323,7 @@ export default function PetitBambouPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentSessions.map((s) => (
+                  {[...recentSessions].sort((a, b) => a.activity_date.localeCompare(b.activity_date)).map((s) => (
                     <tr key={s.uuid} style={styles.tr}>
                       <td style={styles.td}>{formatDate(s.activity_date)}</td>
                       <td style={styles.td}>{s.lesson_name}</td>
