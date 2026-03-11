@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, numeric, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, numeric, integer, boolean } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const projects = pgTable("projects", {
@@ -35,5 +35,16 @@ export const meditations = pgTable("meditations", {
   duration_min: numeric("duration_min"),
   pb_uuid: text("pb_uuid").unique(),
   streak: integer("streak").default(0),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const shopping_items = pgTable("shopping_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  category: text("category"),
+  estimated_price: numeric("estimated_price"),
+  purchased: boolean("purchased").default(false),
+  store_link: text("store_link"),
+  notes: text("notes"),
   created_at: timestamp("created_at").defaultNow(),
 });

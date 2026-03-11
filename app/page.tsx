@@ -39,6 +39,13 @@ const integrations = [
     description: "Suivi de progression, ouvertures et records depuis Chess.com.",
     color: "var(--accent)",
   },
+  {
+    href: "/shopping",
+    icon: "🎁",
+    title: "Shopping",
+    description: "Wishlist et liste de courses avec suivi du budget.",
+    color: "var(--green)",
+  },
 ];
 
 interface Overview {
@@ -48,13 +55,30 @@ interface Overview {
   lastMeditation: { lesson: string | null; date: string | null; streak: number | null } | null;
 }
 
+interface ShoppingStats {
+  total_non_purchased: number;
+  remaining: string;
+}
+
 export default function HubPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [shoppingStats, setShoppingStats] = useState<ShoppingStats | null>(null);
 
   useEffect(() => {
     fetch("/api/overview")
       .then((r) => r.json())
       .then((d) => { if (!d.error) setOverview(d); })
+      .catch(() => {});
+    fetch("/api/shopping/items")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.error && d.stats) {
+          setShoppingStats({
+            total_non_purchased: d.stats.total_non_purchased ?? 0,
+            remaining: d.stats.remaining ?? "0.00",
+          });
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -88,6 +112,13 @@ export default function HubPage() {
               : "—"}
             sub={overview.lastMeditation?.streak ? `Streak : ${overview.lastMeditation.streak} j` : undefined}
           />
+          {shoppingStats && (
+            <OverviewCard
+              label="À acheter"
+              value={`${shoppingStats.total_non_purchased}`}
+              sub={`€${shoppingStats.remaining}`}
+            />
+          )}
         </div>
       )}
 

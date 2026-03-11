@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, sessions, meditations } from "@/lib/schema";
+import { projects, tasks, sessions, meditations, shopping_items } from "@/lib/schema";
 import { eq, gte, sql, desc } from "drizzle-orm";
 
 export async function GET() {
@@ -13,6 +13,7 @@ export async function GET() {
       taskStats,
       todaySessionStats,
       lastMeditation,
+      shoppingStats,
     ] = await Promise.all([
       db.select({
         total: sql<number>`count(*)`,
@@ -31,6 +32,11 @@ export async function GET() {
         date: meditations.date,
         streak: meditations.streak,
       }).from(meditations).orderBy(desc(meditations.date)).limit(1),
+      db.select({
+        total: sql<number>`count(*)`,
+        remaining_budget: sql<number>`coalesce(sum(estimated_price) filter (where purchased = false), 0)`,
+        to_buy: sql<number>`count(*) filter (where purchased = false)`,
+      }).from(shopping_items),
     ]);
 
     return NextResponse.json({
@@ -38,6 +44,7 @@ export async function GET() {
       tasks: taskStats[0],
       today: todaySessionStats[0],
       lastMeditation: lastMeditation[0] ?? null,
+      shopping: shoppingStats[0],
     });
   } catch (error) {
     console.error(error);
