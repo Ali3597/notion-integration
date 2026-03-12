@@ -13,6 +13,7 @@ Plateforme de productivité locale. Centralise tes outils en un seul endroit ave
 | Petit Bambou | `/petitbambou` | Sync des sessions de méditation depuis l'app PB, streaks, calendrier et stats |
 | Shopping | `/shopping` | Wishlist et liste de courses avec suivi du budget |
 | Chess.com | `/chess` | Suivi de progression, ouvertures et records depuis Chess.com |
+| Bibliothèque | `/library` | Livres, auteurs, séries, genres et notes de lecture |
 
 ## Stack
 
@@ -74,8 +75,13 @@ GOOGLE_CLIENT_SECRET=<Google Cloud Console>
 | `sessions` | id, name, task_id, start_time, end_time, notes |
 | `meditations` | id, lesson, date, duration_min, pb_uuid, streak |
 | `shopping_items` | id, name, category, estimated_price, purchased, store_link, notes |
-| `reminders` | id, name, due_date, done, created_at |
+| `reminders` | id, name, due_date, done |
 | `project_relations` | parent_id, child_id |
+| `authors` | id, name, photo_url |
+| `genres` | id, name, icon |
+| `series` | id, name, author_id, status |
+| `books` | id, title, author_id, genre_id, serie_id, status, rating, image_url, started_at, finished_at |
+| `book_notes` | id, title, book_id, content |
 
 Pour modifier le schéma : éditer `lib/schema.ts` puis `npm run db:migrate`.
 
@@ -96,6 +102,8 @@ bash scripts/setup.sh  # Premier lancement : crée la DB + pousse le schéma
 - Filtres directement dans les en-têtes de colonnes des tableaux (clic sur colonne = dropdown inline)
 - Bouton `← Accueil` (`className="btn-back"`) présent sur chaque module
 - Hover des boutons principaux défini dans `globals.css` (`.btn-primary`, `.btn-back`)
+- `button * { cursor: inherit }` dans `globals.css` pour que les enfants de boutons héritent du cursor
+- `.clickable-row td { cursor: pointer }` pour les lignes de tableau cliquables
 
 ## Ajouter un nouveau module
 

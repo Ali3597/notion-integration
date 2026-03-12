@@ -53,20 +53,22 @@ NOTION_CHESS_FORMATS_DB=<db_id>
 app/
   page.tsx                        # Hub home — overview dashboard + module cards
   layout.tsx                      # Root layout: globals.css, auth topbar (logout)
-  globals.css                     # CSS variables (theme), global styles, .btn-back, .btn-primary
+  globals.css                     # CSS variables (theme), global styles, .btn-back, .btn-primary, cursor fixes
   login/page.tsx                  # Login page (dark theme, Google sign-in)
   pomodoro/page.tsx               # Pomodoro timer + sessions table + today stats
-  projects/page.tsx               # CRUD table — projects with session stats + detail panel
+  projects/page.tsx               # CRUD table — projects with session stats + column-header filters
   tasks/page.tsx                  # CRUD table — tasks with column-header filters + session stats
   reminders/page.tsx              # Rappels du quotidien — ajout rapide, filtres, badges retard
   petitbambou/page.tsx            # 4 tabs: Aperçu | Historique | Calendrier | Statistiques
   shopping/page.tsx               # 2 tabs: Général | Par catégorie — wishlist + budget
   chess/page.tsx                  # Chess.com sync (still Notion-backed)
+  library/page.tsx                # 5 tabs: Ma Bibliothèque | Auteurs | Genres | Séries | Notes
   api/
     auth/[...nextauth]/route.ts   # NextAuth.js catch-all
-    overview/route.ts             # GET — live dashboard stats (projects, tasks, today, meditation, shopping, reminders)
+    overview/route.ts             # GET — live dashboard stats (projects, tasks, today, meditation, shopping, reminders, library)
     pomodoro/
       projects/route.ts           # GET/POST/PATCH/DELETE — projects with session stats
+      projects/relations/route.ts # GET/POST/DELETE — parent-child project relations
       tasks/route.ts              # GET/POST/PATCH/DELETE — tasks with filters + session stats
       sessions/route.ts           # GET (last 10) / POST / DELETE
       today-stats/route.ts        # GET — sessions count + minutes today
@@ -84,11 +86,17 @@ app/
       stats/route.ts              # GET — Chess.com stats + Notion DB setup
       sync/route.ts               # POST — sync games to Notion
       games/route.ts              # GET — fetch raw games
+    library/
+      books/route.ts              # GET/POST/PATCH/DELETE — books with author/genre/serie joins + filters
+      authors/route.ts            # GET/POST/PATCH/DELETE — authors with book_count
+      genres/route.ts             # GET/POST/PATCH/DELETE — genres with icon + book_count
+      series/route.ts             # GET/POST/PATCH/DELETE — series with author_name + book_count
+      notes/route.ts              # GET (optional ?book_id=) / POST/PATCH/DELETE — book notes
 auth.ts                           # NextAuth config: Google provider, email whitelist
 middleware.ts                     # Protects all routes except /login and /api/auth/*
 lib/
   db.ts                           # PostgreSQL pool + Drizzle instance
-  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations
+  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes
   petitbambou.ts                  # PB API client + computeStreaks()
   notion-client.ts                # Minimal Notion client — ONLY for chess integration
   chess-notion.ts                 # Chess sync modules (rating, openings, daily, puzzles, formats)
@@ -96,7 +104,7 @@ lib/
 drizzle.config.ts                 # Drizzle Kit config (schema + DB connection)
 scripts/setup.sh                  # First-time DB setup script
 types/
-  index.ts                        # Shared TS types: DBProject, DBTask, DBSession, PBSession, PBMetrics, etc.
+  index.ts                        # Shared TS types: DBProject, DBTask, DBSession, PBSession, PBMetrics, DBAuthor, DBGenre, DBSerie, DBBook, DBBookNote, etc.
 ```
 
 ## Database Schema (Drizzle — PostgreSQL `lifehub`)
@@ -109,6 +117,11 @@ meditations       id, lesson, date, duration_min, pb_uuid (unique), streak, crea
 shopping_items    id, name, category, estimated_price, purchased, store_link, notes, created_at
 reminders         id, name, due_date (date), done (bool, default false), created_at
 project_relations parent_id → projects, child_id → projects  (composite PK)
+authors           id, name, photo_url, created_at
+genres            id, name, icon, created_at
+series            id, name, author_id → authors, status, created_at
+books             id, title, author_id → authors, genre_id → genres, serie_id → series, status, rating, image_url, started_at (date), finished_at (date), created_at
+book_notes        id, title, book_id → books (cascade delete), content, created_at
 ```
 
 `duration_min` for sessions is computed on the fly:
@@ -118,7 +131,7 @@ project_relations parent_id → projects, child_id → projects  (composite PK)
 
 1. **Schema**: add table to `lib/schema.ts`, run `npm run db:migrate`
 2. **API routes**: `app/api/<name>/route.ts` — import `db` from `@/lib/db`, tables from `@/lib/schema`
-3. **Page**: `app/<name>/page.tsx` — include `<Link href="/" className="btn-back">← Accueil</Link>` at the top of `<main>`
+3. **Page**: `app/<name>/page.tsx` — include `<Link href="/" className="btn-back">← Accueil</Link>` as the first child of `<main>`
 4. **Types**: add to `types/index.ts` if needed
 5. **Hub card**: add entry to `integrations` array in `app/page.tsx`
 6. **Overview**: update `/api/overview/route.ts` if relevant stats should appear on the home dashboard
@@ -149,6 +162,8 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - Inline `React.CSSProperties` for layout; `globals.css` handles hover/focus states.
 - **Column-header filters**: all data tables use inline `ColFilterHeader` / `ColSortHeader` components — clicking a column header opens a dropdown filter. No separate filter bar with `<select>`. Active filters shown with a blue dot indicator.
 - **Back button**: every module page includes `<Link href="/" className="btn-back">← Accueil</Link>` as the first child of `<main>`. Style defined in `globals.css`.
+- **Cursor fix**: `* { cursor: default }` global reset requires explicit fixes — `a[href], a[href] * { cursor: pointer }`, `button * { cursor: inherit }`, `.clickable-row td { cursor: pointer }` are all defined in `globals.css`. Add `className="clickable-row"` to `<tr>` elements that should be fully clickable.
+- **Image loading**: external images (e.g. Open Library covers) use a gradient placeholder that fades out on `onLoad`. Use `-M.jpg` size suffix for Open Library URLs (good quality/size tradeoff).
 - Timer auto-saves only when a work interval completes naturally with a task selected. Resets/skips do not save.
 - Selects/dropdowns are disabled while the timer is running.
 - `@/` path alias maps to project root (`tsconfig.json`).
@@ -160,11 +175,24 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - Always named "Rappels" in the UI — never "Tâches" to avoid confusion with the Pomodoro tasks.
 - `due_date` is a PostgreSQL `date` column (Drizzle `date()`), returned as string `"YYYY-MM-DD"`.
 - Sorting: `due_date ASC NULLS LAST` — overdue first, no-date last.
-- Done items always rendered at the bottom (opacity 0.45, name strikethrough).
+- Done items always rendered at the bottom (opacity 0.45, name strikethrough via `textDecorationLine`).
 - Badges: "Aujourd'hui" (blue) when `due_date === today`, "En retard" (red) when `due_date < today && !done`.
+- Use `textDecorationLine` (not `textDecoration` shorthand) when also setting `textDecorationColor` — avoids React style conflict warning.
 
 ## Shopping Module — Specific Notes
 
 - Stats: only "Reste à dépenser" is shown (non-purchased items total).
 - Sorting: purchased items always sorted to the bottom regardless of the active sort key.
 - `purchased` field is included in POST (create) as well as PATCH (edit/toggle).
+
+## Library Module — Specific Notes
+
+- 5 tabs: **Ma Bibliothèque** (grid cards by status sub-tab), **Auteurs** (grid with avatar), **Genres** (colored grid with icon), **Séries** (table), **Notes** (table).
+- Book statuses: `"En cours"`, `"Souhait"`, `"Pas Lu"`, `"Lu"`.
+- Serie statuses: `"En cours"`, `"Terminé"`, `"Abandonné"`.
+- **BookCover component**: shows gradient placeholder with initials immediately, then fades in the real image on `onLoad` (smooth UX even on slow external loads).
+- **Image URLs**: use Open Library CDN — books: `https://covers.openlibrary.org/b/id/{id}-M.jpg`, authors: `https://covers.openlibrary.org/a/id/{id}-M.jpg`. Use `-M.jpg` (not `-L.jpg`) for faster loading.
+- **Genre icons**: stored in the `icon` column of the `genres` table (emoji string). Current icons: 🌱 Développement Personnel, 📝 Essai, ⚔️ Fantaisie, 🖊️ Poésie, 📖 Roman, 🚀 Science Fiction.
+- `book_notes` cascade-deletes when the parent book is deleted.
+- The `BookDrawer` component handles inline note creation/editing/deletion directly without a separate page.
+- Overview stat: `library: { reading, read }` — count of books with status `"En cours"` and `"Lu"`.
