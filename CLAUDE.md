@@ -32,6 +32,9 @@ NEXTAUTH_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=<from Google Cloud Console>
 GOOGLE_CLIENT_SECRET=<from Google Cloud Console>
 
+# iCloud Calendar (dashboard widget)
+ICAL_URL=<URL ICS publique iCloud — jamais exposée côté client>
+
 # Chess.com (optionnel — intégration Notion chess)
 NOTION_TOKEN=secret_...
 CHESS_USERNAME=<chess.com username>

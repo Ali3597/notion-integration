@@ -1,224 +1,146 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { auth, signOut } from "@/auth";
+import DashboardWidgets from "@/app/_components/DashboardWidgets";
 
-const integrations = [
-  {
-    href: "/pomodoro",
-    icon: "◉",
-    title: "Pomodoro",
-    description: "Sessions de travail chronométrées liées à tes projets et tâches.",
-    color: "var(--accent)",
-  },
-  {
-    href: "/projects",
-    icon: "▦",
-    title: "Projets",
-    description: "Vue tableau de tous tes projets avec stats de sessions agrégées.",
-    color: "var(--accent)",
-  },
-  {
-    href: "/tasks",
-    icon: "✓",
-    title: "Tâches",
-    description: "Toutes les tâches filtrables par statut, priorité et projet.",
-    color: "var(--accent)",
-  },
-  {
-    href: "/petitbambou",
-    icon: "🎋",
-    title: "Petit Bambou",
-    description: "Sessions de méditation synchronisées depuis l'app Petit Bambou.",
-    color: "var(--accent2)",
-  },
-  {
-    href: "/chess",
-    icon: "♟️",
-    title: "Chess.com",
-    description: "Suivi de progression, ouvertures et records depuis Chess.com.",
-    color: "var(--accent)",
-  },
-  {
-    href: "/shopping",
-    icon: "🎁",
-    title: "Shopping",
-    description: "Wishlist et liste de courses avec suivi du budget.",
-    color: "var(--green)",
-  },
-  {
-    href: "/reminders",
-    icon: "🔔",
-    title: "Rappels",
-    description: "Tâches du quotidien et choses à ne pas oublier.",
-    color: "var(--accent2)",
-  },
-  {
-    href: "/library",
-    icon: "📚",
-    title: "Bibliothèque",
-    description: "Mes livres, auteurs, séries et notes de lecture.",
-    color: "var(--accent)",
-  },
+const navItems = [
+  { href: "/", icon: "🏠", label: "Dashboard", active: true },
+  { href: "/pomodoro", icon: "⏱️", label: "Pomodoro" },
+  { href: "/projects", icon: "📁", label: "Projets" },
+  { href: "/tasks", icon: "✅", label: "Tâches" },
+  { href: "/reminders", icon: "🔔", label: "Rappels" },
+  { href: "/petitbambou", icon: "🧘", label: "Petit Bambou" },
+  { href: "/shopping", icon: "🛒", label: "Shopping" },
+  { href: "/library", icon: "📚", label: "Bibliothèque" },
+  { href: "/chess", icon: "♟️", label: "Chess" },
 ];
 
-interface Overview {
-  projects: { total: number; active: number };
-  tasks: { total: number; in_progress: number };
-  today: { session_count: number; total_minutes: number };
-  lastMeditation: { lesson: string | null; date: string | null; streak: number | null } | null;
-  reminders: { undone: number; overdue: number };
-  library: { reading: number; read: number };
-}
-
-interface ShoppingStats {
-  total_non_purchased: number;
-  remaining: string;
-}
-
-export default function HubPage() {
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [shoppingStats, setShoppingStats] = useState<ShoppingStats | null>(null);
-
-  useEffect(() => {
-    fetch("/api/overview")
-      .then((r) => r.json())
-      .then((d) => { if (!d.error) setOverview(d); })
-      .catch(() => {});
-    fetch("/api/shopping/items")
-      .then((r) => r.json())
-      .then((d) => {
-        if (!d.error && d.stats) {
-          setShoppingStats({
-            total_non_purchased: d.stats.total_non_purchased ?? 0,
-            remaining: d.stats.remaining ?? "0.00",
-          });
-        }
-      })
-      .catch(() => {});
-  }, []);
+export default async function DashboardPage() {
+  const session = await auth();
+  const userEmail = session?.user?.email ?? "";
+  const firstName = session?.user?.name?.split(" ")[0] ?? userEmail.split("@")[0].replace(/[0-9]/g, "");
+  const userName = firstName || "vous";
 
   return (
-    <main style={styles.main}>
-      <div style={styles.header}>
-        <div style={styles.logo}>life×hub</div>
-        <p style={styles.subtitle}>Tes outils de productivité en local.</p>
-      </div>
+    <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg)" }}>
+      {/* ── Sidebar ── */}
+      <aside style={sidebarStyle}>
+        {/* Logo */}
+        <div style={logoStyle}>life×hub</div>
 
-      {/* Overview */}
-      {overview && (
-        <div style={styles.overview}>
-          <OverviewCard
-            label="Projets actifs"
-            value={`${overview.projects.active} / ${overview.projects.total}`}
-          />
-          <OverviewCard
-            label="Tâches en cours"
-            value={`${overview.tasks.in_progress} / ${overview.tasks.total}`}
-          />
-          <OverviewCard
-            label="Sessions aujourd'hui"
-            value={String(overview.today.session_count)}
-            sub={overview.today.total_minutes > 0 ? `${overview.today.total_minutes} min` : undefined}
-          />
-          <OverviewCard
-            label="Dernière méditation"
-            value={overview.lastMeditation
-              ? new Date(overview.lastMeditation.date!).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
-              : "—"}
-            sub={overview.lastMeditation?.streak ? `Streak : ${overview.lastMeditation.streak} j` : undefined}
-          />
-          {shoppingStats && (
-            <OverviewCard
-              label="À acheter"
-              value={`${shoppingStats.total_non_purchased}`}
-              sub={`€${shoppingStats.remaining}`}
-            />
-          )}
-          {overview.reminders && (
-            <OverviewCard
-              label="Rappels"
-              value={`${overview.reminders.undone}`}
-              sub={overview.reminders.overdue > 0 ? `${overview.reminders.overdue} en retard` : undefined}
-            />
-          )}
-          {overview.library && (
-            <OverviewCard
-              label="Bibliothèque"
-              value={`${overview.library.reading} en cours`}
-              sub={`${overview.library.read} lus`}
-            />
-          )}
+        {/* Nav */}
+        <nav style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={item.active ? activeNavItemStyle : navItemStyle}
+            >
+              <span style={{ fontSize: 15, width: 22, textAlign: "center" }}>{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </nav>
+
+        {/* User section */}
+        <div style={userSectionStyle}>
+          <div style={emailStyle} title={userEmail}>{userEmail}</div>
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/login" });
+            }}
+          >
+            <button type="submit" style={logoutBtnStyle}>
+              Déconnexion
+            </button>
+          </form>
         </div>
-      )}
+      </aside>
 
-      <div style={styles.grid}>
-        {integrations.map((item) => (
-          <Link key={item.href} href={item.href} style={styles.card}>
-            <span style={{ ...styles.cardIcon, color: item.color }}>{item.icon}</span>
-            <div style={styles.cardTitle}>{item.title}</div>
-            <div style={styles.cardDesc}>{item.description}</div>
-          </Link>
-        ))}
-      </div>
-    </main>
-  );
-}
-
-function OverviewCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div style={overviewStyles.card}>
-      <div style={overviewStyles.value}>{value}</div>
-      <div style={overviewStyles.label}>{label}</div>
-      {sub && <div style={overviewStyles.sub}>{sub}</div>}
+      {/* ── Main ── */}
+      <main style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
+        <DashboardWidgets userName={userName} />
+      </main>
     </div>
   );
 }
 
-const overviewStyles: Record<string, React.CSSProperties> = {
-  card: {
-    background: "var(--surface)", border: "1.5px solid var(--border)",
-    borderRadius: 12, padding: "16px 20px", minWidth: 140,
-    display: "flex", flexDirection: "column", gap: 4,
-    boxShadow: "var(--shadow-sm)",
-  },
-  value: {
-    fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--accent)",
-  },
-  label: { fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" },
-  sub: { fontSize: 11, color: "var(--text-muted)" },
+const sidebarStyle: React.CSSProperties = {
+  width: 220,
+  minWidth: 220,
+  minHeight: "100vh",
+  background: "#eeeef8",
+  borderRight: "1px solid var(--border)",
+  display: "flex",
+  flexDirection: "column",
+  padding: "24px 0 20px",
+  position: "sticky",
+  top: 0,
+  height: "100vh",
+  overflowY: "auto",
 };
 
-const styles: Record<string, React.CSSProperties> = {
-  main: {
-    minHeight: "100vh", background: "var(--bg)",
-    display: "flex", flexDirection: "column",
-    alignItems: "center", justifyContent: "center",
-    padding: "48px 24px", gap: 40,
-  },
-  header: { display: "flex", flexDirection: "column", alignItems: "center", gap: 12 },
-  logo: {
-    fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700,
-    color: "var(--text)", letterSpacing: "-0.02em",
-  },
-  subtitle: { fontSize: 15, color: "var(--text-muted)", textAlign: "center" },
-  overview: {
-    display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center",
-  },
-  grid: {
-    display: "flex", flexWrap: "wrap", gap: 20,
-    justifyContent: "center", maxWidth: 860,
-  },
-  card: {
-    display: "flex", flexDirection: "column", gap: 12,
-    background: "var(--surface)", border: "1.5px solid var(--border)",
-    borderRadius: 16, padding: "28px 32px", width: 240,
-    textDecoration: "none", color: "inherit",
-    boxShadow: "var(--shadow-md)",
-    transition: "transform 0.18s, box-shadow 0.18s, border-color 0.18s",
-    cursor: "pointer",
-  },
-  cardIcon: { fontFamily: "var(--font-mono)", fontSize: 28 },
-  cardTitle: { fontSize: 17, fontWeight: 700, color: "var(--text)" },
-  cardDesc: { fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 },
+const logoStyle: React.CSSProperties = {
+  fontFamily: "var(--font-mono)",
+  fontSize: 18,
+  fontWeight: 700,
+  color: "var(--text)",
+  letterSpacing: "-0.02em",
+  padding: "0 20px 20px",
+  borderBottom: "1px solid var(--border)",
+  marginBottom: 12,
+};
+
+const navItemStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "8px 20px",
+  fontSize: 13,
+  fontWeight: 400,
+  color: "var(--text-muted)",
+  textDecoration: "none",
+  borderRight: "3px solid transparent",
+};
+
+const activeNavItemStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "8px 20px",
+  fontSize: 13,
+  fontWeight: 600,
+  color: "var(--accent)",
+  textDecoration: "none",
+  background: "rgba(59, 126, 248, 0.1)",
+  borderRight: "3px solid var(--accent)",
+};
+
+const userSectionStyle: React.CSSProperties = {
+  padding: "16px 20px 0",
+  borderTop: "1px solid var(--border)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+};
+
+const emailStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--text-muted)",
+  fontFamily: "var(--font-mono)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const logoutBtnStyle: React.CSSProperties = {
+  fontSize: 11,
+  padding: "6px 12px",
+  borderRadius: 50,
+  background: "var(--surface)",
+  border: "1.5px solid var(--border)",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+  fontFamily: "var(--font-sans)",
+  width: "100%",
 };
