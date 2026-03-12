@@ -26,7 +26,7 @@ next-env.d.ts
 .idea/
 
 # Claude Code local settings (contain MCP config, permissions — not for VCS)
-.claude/settings.local.json
+.claude/
 
 # Drizzle migrations (generated, not source of truth)
 drizzle/
