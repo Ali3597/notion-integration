@@ -53,6 +53,13 @@ const integrations = [
     description: "Tâches du quotidien et choses à ne pas oublier.",
     color: "var(--accent2)",
   },
+  {
+    href: "/library",
+    icon: "📚",
+    title: "Bibliothèque",
+    description: "Mes livres, auteurs, séries et notes de lecture.",
+    color: "var(--accent)",
+  },
 ];
 
 interface Overview {
@@ -61,6 +68,7 @@ interface Overview {
   today: { session_count: number; total_minutes: number };
   lastMeditation: { lesson: string | null; date: string | null; streak: number | null } | null;
   reminders: { undone: number; overdue: number };
+  library: { reading: number; read: number };
 }
 
 interface ShoppingStats {
@@ -132,6 +140,13 @@ export default function HubPage() {
               label="Rappels"
               value={`${overview.reminders.undone}`}
               sub={overview.reminders.overdue > 0 ? `${overview.reminders.overdue} en retard` : undefined}
+            />
+          )}
+          {overview.library && (
+            <OverviewCard
+              label="Bibliothèque"
+              value={`${overview.library.reading} en cours`}
+              sub={`${overview.library.read} lus`}
             />
           )}
         </div>

@@ -57,6 +57,50 @@ export const reminders = pgTable("reminders", {
   created_at: timestamp("created_at").defaultNow(),
 });
 
+export const authors = pgTable("authors", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  photo_url: text("photo_url"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const genres = pgTable("genres", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  icon: text("icon"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const series = pgTable("series", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  author_id: uuid("author_id").references(() => authors.id, { onDelete: "set null" }),
+  status: text("status"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const books = pgTable("books", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  author_id: uuid("author_id").references(() => authors.id, { onDelete: "set null" }),
+  genre_id: uuid("genre_id").references(() => genres.id, { onDelete: "set null" }),
+  serie_id: uuid("serie_id").references(() => series.id, { onDelete: "set null" }),
+  status: text("status").default("Pas Lu"),
+  rating: integer("rating"),
+  image_url: text("image_url"),
+  started_at: date("started_at"),
+  finished_at: date("finished_at"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const book_notes = pgTable("book_notes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  book_id: uuid("book_id").references(() => books.id, { onDelete: "cascade" }).notNull(),
+  content: text("content"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
 export const project_relations = pgTable("project_relations", {
   parent_id: uuid("parent_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
   child_id: uuid("child_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),

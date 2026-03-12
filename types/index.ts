@@ -70,6 +70,61 @@ export type NotionSession = {
   task: string | null;
 };
 
+// ── Library ──────────────────────────────────────────────────────────────────
+
+export type DBAuthor = {
+  id: string;
+  name: string;
+  photo_url: string | null;
+  book_count?: number;
+  created_at?: string | null;
+};
+
+export type DBGenre = {
+  id: string;
+  name: string;
+  icon: string | null;
+  book_count?: number;
+  created_at?: string | null;
+};
+
+export type DBSerie = {
+  id: string;
+  name: string;
+  author_id: string | null;
+  author_name?: string | null;
+  status: string | null;
+  book_count?: number;
+  created_at?: string | null;
+};
+
+export type DBBook = {
+  id: string;
+  title: string;
+  author_id: string | null;
+  author_name?: string | null;
+  genre_id: string | null;
+  genre_name?: string | null;
+  serie_id: string | null;
+  serie_name?: string | null;
+  status: string | null;
+  rating: number | null;
+  image_url: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  note_count?: number;
+  created_at?: string | null;
+};
+
+export type DBBookNote = {
+  id: string;
+  title: string;
+  book_id: string;
+  book_title?: string | null;
+  content: string | null;
+  created_at?: string | null;
+};
+
 // ── Chess ────────────────────────────────────────────────────────────────────
 
 export interface ParsedGame {

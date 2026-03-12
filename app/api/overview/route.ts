@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, sessions, meditations, shopping_items, reminders } from "@/lib/schema";
+import { projects, tasks, sessions, meditations, shopping_items, reminders, books } from "@/lib/schema";
 import { eq, gte, sql, desc } from "drizzle-orm";
 
 export async function GET() {
@@ -15,6 +15,7 @@ export async function GET() {
       lastMeditation,
       shoppingStats,
       reminderStats,
+      libraryStats,
     ] = await Promise.all([
       db.select({
         total: sql<number>`count(*)`,
@@ -42,9 +43,14 @@ export async function GET() {
         undone: sql<number>`count(*) filter (where done = false)`,
         overdue: sql<number>`count(*) filter (where done = false and due_date < current_date)`,
       }).from(reminders),
+      db.select({
+        reading: sql<number>`count(*) filter (where status = 'En cours')`,
+        read: sql<number>`count(*) filter (where status = 'Lu')`,
+      }).from(books),
     ]);
 
     const rs = reminderStats[0];
+    const ls = libraryStats[0];
     return NextResponse.json({
       projects: projectStats[0],
       tasks: taskStats[0],
@@ -52,6 +58,7 @@ export async function GET() {
       lastMeditation: lastMeditation[0] ?? null,
       shopping: shoppingStats[0],
       reminders: { undone: Number(rs.undone), overdue: Number(rs.overdue) },
+      library: { reading: Number(ls.reading), read: Number(ls.read) },
     });
   } catch (error) {
     console.error(error);
