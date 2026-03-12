@@ -27,9 +27,13 @@ export type DBProject = {
   name: string;
   status: string | null;
   type: string | null;
+  created_at?: string | null;
   task_count?: number;
   session_count?: number;
+  own_minutes?: number;
   total_minutes?: number;
+  parents: { id: string; name: string }[];
+  children: { id: string; name: string; own_minutes: number }[];
 };
 
 export type DBTask = {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import type { DBProject, DBTask, DBSession } from "@/types";
 
 type Mode = "work" | "break";
@@ -178,6 +179,7 @@ export default function PomodoroPage() {
 
   return (
     <main style={styles.main}>
+      <Link href="/" className="btn-back">← Accueil</Link>
       {/* Left panel */}
       <div style={styles.left}>
         <div style={styles.logo}>

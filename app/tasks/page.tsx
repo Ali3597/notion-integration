@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import type { DBTask, DBProject } from "@/types";
 
-const STATUS_OPTIONS = ["À faire", "En cours", "Terminé"];
+const STATUS_OPTIONS = ["À faire", "Non commencé", "En cours", "Terminé"];
 const PRIORITY_OPTIONS = ["High", "Medium", "Low"];
 
 function formatMinutes(min: number) {
@@ -11,6 +12,66 @@ function formatMinutes(min: number) {
   if (min < 60) return `${Math.round(min)}min`;
   return `${Math.floor(min / 60)}h${min % 60 > 0 ? String(Math.round(min % 60)).padStart(2, "0") : ""}`;
 }
+
+// ─────────────────────────── Column filter header ─────────────────────────
+
+function ColFilterHeader({ label, options, value, onChange, thStyle }: {
+  label: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+  thStyle?: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLTableCellElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const isActive = value !== "";
+
+  return (
+    <th ref={ref}
+      style={{ ...thStyle, cursor: "pointer", position: "relative", userSelect: "none" }}
+      onClick={() => setOpen((v) => !v)}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {label}
+        {isActive && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--accent)", display: "inline-block", flexShrink: 0 }} />}
+        <span style={{ fontSize: 7, opacity: 0.5 }}>{open ? "▲" : "▼"}</span>
+      </span>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 2px)", left: 0, zIndex: 300,
+          background: "var(--surface)", border: "1.5px solid var(--border)",
+          borderRadius: 8, boxShadow: "var(--shadow-md)", minWidth: 160,
+          overflow: "hidden", fontWeight: "normal", letterSpacing: "normal",
+          textTransform: "none", fontSize: 12,
+        }} onClick={(e) => e.stopPropagation()}>
+          {options.map((opt) => (
+            <div key={opt.value}
+              style={{ padding: "8px 14px", cursor: "pointer",
+                color: value === opt.value ? "var(--accent)" : "var(--text)",
+                fontWeight: value === opt.value ? 600 : 400,
+                background: "transparent" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--bg)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              onClick={() => { onChange(opt.value); setOpen(false); }}>
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </th>
+  );
+}
+
+// ─────────────────────────── Page ─────────────────────────────────────────
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<DBTask[]>([]);
@@ -47,6 +108,12 @@ export default function TasksPage() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("projectId");
+    if (pid) setFilterProject(pid);
+  }, []);
+
   const filtered = tasks.filter((t) => {
     if (filterStatus && t.status !== filterStatus) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
@@ -61,12 +128,7 @@ export default function TasksPage() {
     await fetch("/api/pomodoro/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newName.trim(),
-        status: newStatus,
-        priority: newPriority,
-        project_id: newProjectId || null,
-      }),
+      body: JSON.stringify({ name: newName.trim(), status: newStatus, priority: newPriority, project_id: newProjectId || null }),
     });
     setNewName("");
     setCreating(false);
@@ -93,8 +155,14 @@ export default function TasksPage() {
   const priorityIcon = (p: string | null) =>
     p === "High" ? "🔴" : p === "Medium" ? "🟡" : "🟢";
 
+  const projectOptions = [
+    { value: "", label: "Tous les projets" },
+    ...projects.map((p) => ({ value: p.id, label: p.name })),
+  ];
+
   return (
     <main style={styles.main}>
+      <Link href="/" className="btn-back">← Accueil</Link>
       <div style={styles.header}>
         <div style={styles.title}>Tâches</div>
         <button className="btn-primary" style={styles.btnPrimary} onClick={() => setCreating((v) => !v)}>
@@ -102,32 +170,10 @@ export default function TasksPage() {
         </button>
       </div>
 
-      {/* Filters */}
-      <div style={styles.filters}>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={styles.filterSelect}>
-          <option value="">Tous les statuts</option>
-          {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={styles.filterSelect}>
-          <option value="">Toutes priorités</option>
-          {PRIORITY_OPTIONS.map((p) => <option key={p}>{p}</option>)}
-        </select>
-        <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} style={styles.filterSelect}>
-          <option value="">Tous les projets</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
-
       {creating && (
         <form onSubmit={handleCreate} style={styles.form}>
-          <input
-            type="text"
-            placeholder="Nom de la tâche"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            style={styles.input}
-            autoFocus
-          />
+          <input type="text" placeholder="Nom de la tâche" value={newName}
+            onChange={(e) => setNewName(e.target.value)} style={styles.input} autoFocus />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} style={styles.select}>
             {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
           </select>
@@ -149,9 +195,15 @@ export default function TasksPage() {
           <thead>
             <tr>
               <th style={styles.th}>Tâche</th>
-              <th style={styles.th}>Statut</th>
-              <th style={styles.th}>Priorité</th>
-              <th style={styles.th}>Projet</th>
+              <ColFilterHeader label="Statut"
+                options={[{ value: "", label: "Tous" }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s }))]}
+                value={filterStatus} onChange={setFilterStatus} thStyle={styles.th} />
+              <ColFilterHeader label="Priorité"
+                options={[{ value: "", label: "Toutes" }, ...PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))]}
+                value={filterPriority} onChange={setFilterPriority} thStyle={styles.th} />
+              <ColFilterHeader label="Projet"
+                options={projectOptions}
+                value={filterProject} onChange={setFilterProject} thStyle={styles.th} />
               <th style={{ ...styles.th, textAlign: "right" }}>Sessions</th>
               <th style={{ ...styles.th, textAlign: "right" }}>Total</th>
               <th style={styles.th}></th>
@@ -166,27 +218,21 @@ export default function TasksPage() {
               editingId === t.id ? (
                 <tr key={t.id} style={styles.tr}>
                   <td style={styles.td}>
-                    <input
-                      value={editValues.name ?? t.name}
+                    <input value={editValues.name ?? t.name}
                       onChange={(e) => setEditValues((v) => ({ ...v, name: e.target.value }))}
-                      style={styles.inlineInput}
-                    />
+                      style={styles.inlineInput} />
                   </td>
                   <td style={styles.td}>
-                    <select
-                      value={editValues.status ?? t.status ?? ""}
+                    <select value={editValues.status ?? t.status ?? ""}
                       onChange={(e) => setEditValues((v) => ({ ...v, status: e.target.value }))}
-                      style={styles.inlineSelect}
-                    >
+                      style={styles.inlineSelect}>
                       {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
                     </select>
                   </td>
                   <td style={styles.td}>
-                    <select
-                      value={editValues.priority ?? t.priority ?? ""}
+                    <select value={editValues.priority ?? t.priority ?? ""}
                       onChange={(e) => setEditValues((v) => ({ ...v, priority: e.target.value }))}
-                      style={styles.inlineSelect}
-                    >
+                      style={styles.inlineSelect}>
                       {PRIORITY_OPTIONS.map((p) => <option key={p}>{p}</option>)}
                     </select>
                   </td>
@@ -241,8 +287,6 @@ const styles: Record<string, React.CSSProperties> = {
   main: { minHeight: "100vh", background: "var(--bg)", padding: "48px 40px", display: "flex", flexDirection: "column", gap: 24 },
   header: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   title: { fontSize: 24, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" },
-  filters: { display: "flex", gap: 12 },
-  filterSelect: { fontSize: 13, padding: "8px 12px", borderRadius: 8, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", width: "auto" },
   form: { display: "flex", gap: 12, alignItems: "center", background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 12, padding: "16px 20px" },
   input: { flex: 1, fontSize: 13, padding: "10px 14px", background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 8, color: "var(--text)", fontFamily: "var(--font-sans)" },
   select: { fontSize: 13, padding: "10px 14px", width: "auto", background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 8, color: "var(--text)" },

@@ -46,6 +46,13 @@ const integrations = [
     description: "Wishlist et liste de courses avec suivi du budget.",
     color: "var(--green)",
   },
+  {
+    href: "/reminders",
+    icon: "🔔",
+    title: "Rappels",
+    description: "Tâches du quotidien et choses à ne pas oublier.",
+    color: "var(--accent2)",
+  },
 ];
 
 interface Overview {
@@ -53,6 +60,7 @@ interface Overview {
   tasks: { total: number; in_progress: number };
   today: { session_count: number; total_minutes: number };
   lastMeditation: { lesson: string | null; date: string | null; streak: number | null } | null;
+  reminders: { undone: number; overdue: number };
 }
 
 interface ShoppingStats {
@@ -117,6 +125,13 @@ export default function HubPage() {
               label="À acheter"
               value={`${shoppingStats.total_non_purchased}`}
               sub={`€${shoppingStats.remaining}`}
+            />
+          )}
+          {overview.reminders && (
+            <OverviewCard
+              label="Rappels"
+              value={`${overview.reminders.undone}`}
+              sub={overview.reminders.overdue > 0 ? `${overview.reminders.overdue} en retard` : undefined}
             />
           )}
         </div>

@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       estimated_price: estimated_price != null ? String(estimated_price) : null,
       store_link: store_link ?? null,
       notes: notes ?? null,
+      purchased: body.purchased === true,
     }).returning();
     return NextResponse.json(item, { status: 201 });
   } catch (error) {

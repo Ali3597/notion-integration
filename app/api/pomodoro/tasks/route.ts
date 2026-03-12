@@ -25,8 +25,11 @@ export async function GET(request: Request) {
       .groupBy(tasks.id, projects.name)
       .orderBy(tasks.name);
 
+    const allParam = searchParams.get("all");
     const rows = projectId
-      ? await base.where(and(ne(tasks.status, "Terminé"), eq(tasks.project_id, projectId)))
+      ? allParam === "true"
+        ? await base.where(eq(tasks.project_id, projectId))
+        : await base.where(and(ne(tasks.status, "Terminé"), eq(tasks.project_id, projectId)))
       : await base;
 
     return NextResponse.json(rows);

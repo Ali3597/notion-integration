@@ -22,7 +22,8 @@
       "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\" && DATABASE_URL=postgresql://localhost:5432/lifehub npx drizzle-kit push 2>&1)",
       "Bash(export PATH=\"/opt/homebrew/opt/postgresql@16/bin:$PATH\" && psql postgres -c \"DROP DATABASE notion_hub;\" 2>&1)",
       "Bash(DATABASE_URL=postgresql://localhost:5432/lifehub npx next build 2>&1 | tail -20)",
-      "Bash(DATABASE_URL=postgresql://localhost:5432/lifehub npx drizzle-kit push 2>&1)"
+      "Bash(DATABASE_URL=postgresql://localhost:5432/lifehub npx drizzle-kit push 2>&1)",
+      "Bash(DATABASE_URL=postgresql://localhost:5432/lifehub npm run db:migrate 2>&1)"
     ]
   }
 }

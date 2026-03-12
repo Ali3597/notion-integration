@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import type { ChessStats } from "@/types";
 
 const DB_LABELS: Record<string, string> = {
@@ -81,6 +82,7 @@ export default function ChessPage() {
 
   return (
     <main style={styles.main}>
+      <Link href="/" className="btn-back">← Accueil</Link>
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.logo}>

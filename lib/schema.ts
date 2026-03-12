@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, numeric, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, numeric, integer, boolean, primaryKey, date } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const projects = pgTable("projects", {
@@ -48,3 +48,18 @@ export const shopping_items = pgTable("shopping_items", {
   notes: text("notes"),
   created_at: timestamp("created_at").defaultNow(),
 });
+
+export const reminders = pgTable("reminders", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  due_date: date("due_date"),
+  done: boolean("done").default(false),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const project_relations = pgTable("project_relations", {
+  parent_id: uuid("parent_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  child_id: uuid("child_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.parent_id, t.child_id] }),
+}));

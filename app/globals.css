@@ -137,10 +137,42 @@ input[type="number"]::-webkit-outer-spin-button {
 
 /* ── Hub cards ── */
 
+a[href], a[href] * {
+  cursor: pointer;
+}
+
 a[href]:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   border-color: var(--accent) !important;
+}
+
+/* ── Back button ── */
+
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  align-self: flex-start;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-back:hover {
+  color: var(--accent) !important;
+  background: rgba(59, 126, 248, 0.06) !important;
+  border-color: rgba(59, 126, 248, 0.4) !important;
+  transform: none !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 /* ── Buttons ── */
