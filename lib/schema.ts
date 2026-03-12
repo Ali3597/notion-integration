@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, numeric, integer, boolean, primaryKey, date } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, numeric, integer, boolean, primaryKey, date, unique } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const projects = pgTable("projects", {
@@ -106,4 +106,28 @@ export const project_relations = pgTable("project_relations", {
   child_id: uuid("child_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.parent_id, t.child_id] }),
+}));
+
+export const habits = pgTable("habits", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  icon: text("icon"),
+  color: text("color"),
+  frequency_type: text("frequency_type").notNull().default("daily"),
+  frequency_days: text("frequency_days"),
+  target_per_period: integer("target_per_period").default(1),
+  active: boolean("active").default(true),
+  created_at: timestamp("created_at").defaultNow(),
+  archived_at: timestamp("archived_at"),
+});
+
+export const habit_logs = pgTable("habit_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  habit_id: uuid("habit_id").references(() => habits.id, { onDelete: "cascade" }).notNull(),
+  completed_date: date("completed_date").notNull(),
+  note: text("note"),
+  created_at: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  habit_date_unique: unique().on(t.habit_id, t.completed_date),
 }));

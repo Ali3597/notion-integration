@@ -32,9 +32,11 @@ type ShoppingStats = {
   remaining_budget: number;
   recent_items: { name: string; estimated_price: string | null }[];
 };
+type HabitItem = { id: string; name: string; icon: string | null; color: string | null; completed_today: boolean };
 type DashboardData = {
   reminders: Reminder[];
   projects: ProjectWithTasks[];
+  habits: HabitItem[];
   pomodoro: PomodoroStats;
   meditation: MeditationStats;
   books_reading: BookReading[];
@@ -115,15 +117,23 @@ function Widget({
   children,
   action,
   headerExtra,
+  accent,
 }: {
   title: string;
   icon: string;
   children: React.ReactNode;
   action?: { label: string; href: string };
   headerExtra?: React.ReactNode;
+  accent?: boolean;
 }) {
   return (
-    <div style={widgetStyle}>
+    <div style={{
+      ...widgetStyle,
+      ...(accent ? {
+        borderTop: "3px solid var(--accent)",
+        boxShadow: "0 4px 24px rgba(59,126,248,0.10), var(--shadow-sm)",
+      } : {}),
+    }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 15 }}>{icon}</span>
@@ -615,6 +625,97 @@ function ShoppingWidget({ shopping }: { shopping?: ShoppingStats }) {
   );
 }
 
+// ── Habits widget ─────────────────────────────────────────────────────────────
+
+function HabitsWidget({ habits: initial }: { habits?: HabitItem[] }) {
+  const [habits, setHabits] = useState<HabitItem[]>(initial ?? []);
+  const loading = initial === undefined;
+
+  useEffect(() => {
+    if (initial !== undefined) setHabits(initial);
+  }, [initial]);
+
+  const toggle = async (id: string, currentlyDone: boolean) => {
+    setHabits((prev) => prev.map((h) => h.id === id ? { ...h, completed_today: !currentlyDone } : h));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split("T")[0];
+    try {
+      if (currentlyDone) {
+        await fetch(`/api/habits/log?habit_id=${id}&date=${todayStr}`, { method: "DELETE" });
+      } else {
+        await fetch("/api/habits/log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ habit_id: id, completed_date: todayStr }),
+        });
+      }
+    } catch {
+      setHabits((prev) => prev.map((h) => h.id === id ? { ...h, completed_today: currentlyDone } : h));
+    }
+  };
+
+  const doneCount = habits.filter((h) => h.completed_today).length;
+  const total = habits.length;
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  return (
+    <Widget title="Habitudes du jour" icon="🎯" action={{ label: "Voir tout →", href: "/habits" }} accent>
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Skeleton /><Skeleton /><Skeleton />
+        </div>
+      ) : total === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Aucune habitude prévue aujourd'hui.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* Progress bar */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12, color: "var(--text-muted)" }}>
+              <span>{doneCount}/{total} complétées</span>
+              <span style={{ fontWeight: 600, color: pct === 100 ? "var(--green)" : "var(--accent)" }}>{pct}%</span>
+            </div>
+            <div style={{ background: "var(--border)", borderRadius: 4, height: 5, overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: pct === 100 ? "var(--green)" : "var(--accent)", borderRadius: 4, transition: "width 0.3s" }} />
+            </div>
+          </div>
+          {/* Habit checkboxes */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {habits.map((h) => (
+              <div key={h.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  onClick={() => toggle(h.id, h.completed_today)}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    border: `2px solid ${h.color || "var(--accent)"}`,
+                    background: h.completed_today ? (h.color || "var(--accent)") : "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    transition: "background 0.2s",
+                  }}
+                >
+                  {h.completed_today && (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+                <span style={{ fontSize: 13, color: h.completed_today ? "var(--text-muted)" : "var(--text)", textDecoration: h.completed_today ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {h.icon ? `${h.icon} ` : ""}{h.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Widget>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function DashboardWidgets({ userName }: { userName: string }) {
@@ -665,13 +766,18 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
         {/* Rappels — col span 1 */}
         <RemindersWidget reminders={dashboard?.reminders} />
 
-        {/* Projets — col span 2 */}
+        {/* Habitudes — col span 2 */}
         <div style={{ gridColumn: "span 2" }}>
-          <ProjectsWidget projects={dashboard?.projects} />
+          <HabitsWidget habits={dashboard?.habits} />
         </div>
 
         {/* Pomodoro — col span 1 */}
         <PomodoroWidget pomodoro={dashboard?.pomodoro} />
+
+        {/* Projets — col span 2 */}
+        <div style={{ gridColumn: "span 2" }}>
+          <ProjectsWidget projects={dashboard?.projects} />
+        </div>
 
         {/* Méditation — col span 1 */}
         <MeditationWidget meditation={dashboard?.meditation} />

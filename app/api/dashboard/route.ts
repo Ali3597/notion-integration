@@ -9,6 +9,8 @@ import {
   authors,
   shopping_items,
   reminders,
+  habits,
+  habit_logs,
 } from "@/lib/schema";
 import { eq, and, gte, lte, desc, asc, sql, inArray } from "drizzle-orm";
 
@@ -33,6 +35,8 @@ export async function GET() {
       readingBooks,
       shoppingRow,
       recentShoppingItems,
+      habitsToday,
+      habitLogsToday,
     ] = await Promise.all([
       // Urgent reminders: non-done, due within 7 days (including overdue)
       db
@@ -105,6 +109,19 @@ export async function GET() {
         .where(eq(shopping_items.purchased, false))
         .orderBy(desc(shopping_items.created_at))
         .limit(3),
+
+      // Active habits
+      db
+        .select({ id: habits.id, name: habits.name, icon: habits.icon, color: habits.color, frequency_type: habits.frequency_type, frequency_days: habits.frequency_days })
+        .from(habits)
+        .where(eq(habits.active, true))
+        .orderBy(habits.created_at),
+
+      // Today's habit logs
+      db
+        .select({ habit_id: habit_logs.habit_id })
+        .from(habit_logs)
+        .where(eq(habit_logs.completed_date, todayStr)),
     ]);
 
     // Fetch tasks for active projects
@@ -151,9 +168,34 @@ export async function GET() {
       };
     });
 
+    // Compute habits today
+    const loggedTodaySet = new Set(habitLogsToday.map((l) => l.habit_id));
+    const habitsDueToday = habitsToday.filter((h) => {
+      const today2 = new Date();
+      const isoDay = today2.getDay() === 0 ? 7 : today2.getDay();
+      switch (h.frequency_type) {
+        case "daily": return true;
+        case "specific_days": {
+          const days: number[] = JSON.parse(h.frequency_days || "[]");
+          return days.includes(isoDay);
+        }
+        case "weekly": return true;
+        case "monthly": {
+          const day = parseInt(h.frequency_days || "1", 10);
+          return today2.getDate() === day;
+        }
+        default: return false;
+      }
+    });
+    const habitsWidget = habitsDueToday.map((h) => ({
+      ...h,
+      completed_today: loggedTodaySet.has(h.id),
+    }));
+
     return NextResponse.json({
       reminders: urgentReminders,
       projects: projectsWithTasks,
+      habits: habitsWidget,
       pomodoro: {
         session_count: Number(todayStats[0]?.session_count ?? 0),
         total_minutes: Number(todayStats[0]?.total_minutes ?? 0),

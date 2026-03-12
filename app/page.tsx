@@ -11,6 +11,7 @@ const navItems = [
   { href: "/petitbambou", icon: "🧘", label: "Petit Bambou" },
   { href: "/shopping", icon: "🛒", label: "Shopping" },
   { href: "/library", icon: "📚", label: "Bibliothèque" },
+  { href: "/habits", icon: "🎯", label: "Habitudes" },
   { href: "/chess", icon: "♟️", label: "Chess" },
 ];
 

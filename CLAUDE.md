@@ -66,6 +66,7 @@ app/
   shopping/page.tsx               # 2 tabs: Général | Par catégorie — wishlist + budget
   chess/page.tsx                  # Chess.com sync (still Notion-backed)
   library/page.tsx                # 5 tabs: Ma Bibliothèque | Auteurs | Genres | Séries | Notes
+  habits/page.tsx                 # 3 tabs: Aujourd'hui (checklist+streaks) | Calendrier (par habitude) | Statistiques (Recharts: heatmap, bar, line, radar)
   api/
     auth/[...nextauth]/route.ts   # NextAuth.js catch-all
     overview/route.ts             # GET — live dashboard stats (projects, tasks, today, meditation, shopping, reminders, library)
@@ -95,11 +96,15 @@ app/
       genres/route.ts             # GET/POST/PATCH/DELETE — genres with icon + book_count
       series/route.ts             # GET/POST/PATCH/DELETE — series with author_name + book_count
       notes/route.ts              # GET (optional ?book_id=) / POST/PATCH/DELETE — book notes
+    habits/route.ts               # GET (with stats: streak, completion_rate, completed_today) / POST / PATCH ?id= / DELETE ?id=
+    habits/log/route.ts           # GET ?from=&to=&habit_id= / POST { habit_id, completed_date, note? } / DELETE ?habit_id=&date=
+    habits/stats/route.ts         # GET ?id=&days= — heatmap, byDayOfWeek, byMonth, streakHistory for Recharts
+    habits/overview/route.ts      # GET — 90-day grid for all active habits (dates[], grid{ habit_id: dates[] })
 auth.ts                           # NextAuth config: Google provider, email whitelist
 middleware.ts                     # Protects all routes except /login and /api/auth/*
 lib/
   db.ts                           # PostgreSQL pool + Drizzle instance
-  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes
+  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs
   petitbambou.ts                  # PB API client + computeStreaks()
   notion-client.ts                # Minimal Notion client — ONLY for chess integration
   chess-notion.ts                 # Chess sync modules (rating, openings, daily, puzzles, formats)
@@ -125,6 +130,8 @@ genres            id, name, icon, created_at
 series            id, name, author_id → authors, status, created_at
 books             id, title, author_id → authors, genre_id → genres, serie_id → series, status, rating, image_url, started_at (date), finished_at (date), created_at
 book_notes        id, title, book_id → books (cascade delete), content, created_at
+habits            id, name, description, icon, color, frequency_type, frequency_days (JSON), target_per_period, active (bool), created_at, archived_at
+habit_logs        id, habit_id → habits (cascade), completed_date (date), note, created_at — UNIQUE(habit_id, completed_date)
 ```
 
 `duration_min` for sessions is computed on the fly:
@@ -199,3 +206,17 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - `book_notes` cascade-deletes when the parent book is deleted.
 - The `BookDrawer` component handles inline note creation/editing/deletion directly without a separate page.
 - Overview stat: `library: { reading, read }` — count of books with status `"En cours"` and `"Lu"`.
+
+## Habitudes Module — Specific Notes
+
+- 3 tabs: **Aujourd'hui** (checklist with streaks, progress bar, toggle for not-due-today), **Calendrier** (per-habit mini-grid per month), **Statistiques** (Recharts charts per habit).
+- Frequency types: `"daily"`, `"weekly"`, `"specific_days"`, `"monthly"`.
+  - `daily` — due every day.
+  - `specific_days` — `frequency_days` is a JSON array of ISO weekday numbers (1=Mon … 7=Sun).
+  - `weekly` — due any day; `target_per_period` = how many times per week (for streak logic).
+  - `monthly` — `frequency_days` is a string with the day-of-month number (e.g. `"15"`).
+- `habit_logs` has a UNIQUE constraint on `(habit_id, completed_date)`. POST to `/api/habits/log` uses `onConflictDoUpdate` (safe upsert).
+- Streak logic: walks backward through "due dates" only (respecting frequency_type); skips today if not yet completed to avoid breaking streak.
+- Dashboard widget: shows only habits due today with quick toggle checkboxes.
+- Archive via `PATCH ?id= { active: false, archived_at: ... }` — archived habits disappear from all views.
+- `isHabitDue()` helper is duplicated in `app/api/habits/route.ts`, `app/api/habits/stats/route.ts`, `app/api/dashboard/route.ts`, and `app/habits/page.tsx` (client-side) — kept local to each to avoid shared import complexity.

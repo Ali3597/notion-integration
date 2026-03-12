@@ -162,3 +162,35 @@ export interface ChessSyncResult {
   modules: string[];
   durationMs: number;
 }
+
+// ── Habits ───────────────────────────────────────────────────────────────────
+
+export type DBHabit = {
+  id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  frequency_type: string; // "daily" | "weekly" | "specific_days" | "monthly"
+  frequency_days: string | null; // JSON string
+  target_per_period: number | null;
+  active: boolean | null;
+  created_at?: string | null;
+  archived_at?: string | null;
+};
+
+export type DBHabitWithStats = DBHabit & {
+  completed_today: boolean;
+  current_streak: number;
+  best_streak: number;
+  completion_rate_30d: number;
+  logs_this_week: number;
+};
+
+export type DBHabitLog = {
+  id: string;
+  habit_id: string;
+  completed_date: string;
+  note: string | null;
+  created_at?: string | null;
+};
