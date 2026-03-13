@@ -4,10 +4,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { DBBook, DBAuthor, DBGenre, DBSerie, DBBookNote } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  LineChart, Line, PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 // ─────────────────────────── Constants ────────────────────────────────────
 
-type MainTab = "library" | "authors" | "genres" | "series" | "notes";
+type MainTab = "library" | "authors" | "genres" | "series" | "notes" | "stats";
 type BookStatus = "En cours" | "Souhait" | "Pas Lu" | "Lu";
 const BOOK_STATUSES: BookStatus[] = ["En cours", "Souhait", "Pas Lu", "Lu"];
 const SERIE_STATUSES = ["En cours", "Terminé", "Abandonné"];
@@ -1003,6 +1007,284 @@ function TabNotes({ notes, books, onUpdate }: { notes: DBBookNote[]; books: DBBo
   );
 }
 
+// ─────────────────────────── Library Stats ────────────────────────────────
+
+type LibraryStats = {
+  kpis: {
+    total_lu: number;
+    total_en_cours: number;
+    total_souhait: number;
+    total_pas_lu: number;
+    avg_monthly_rhythm: number;
+    avg_speed_days: number | null;
+    best_serie: { name: string; count: number } | null;
+  };
+  heatmap: { date: string; count: number }[];
+  finishedByMonth: { month: string; count: number }[];
+  genreDistribution: { name: string; icon: string; count: number }[];
+  speedByGenre: { name: string; avg_days: number }[];
+  ratingByQuarter: { quarter: string; avg_rating: number; count: number }[];
+  topAuthors: { name: string; book_count: number; avg_rating: number | null }[];
+  backlogByGenre: { name: string; souhait: number; pas_lu: number }[];
+  startedVsFinished: { month: string; started: number; finished: number }[];
+};
+
+const PALETTE = ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#14b8a6"];
+
+function fmtMonth(m: string) {
+  const [y, mo] = m.split("-");
+  const d = new Date(Number(y), Number(mo) - 1, 1);
+  return d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+}
+
+function fmtQuarter(q: string) { return q; }
+
+function localDateStrLib(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function NoData({ label = "Pas de données" }: { label?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--text-muted)", fontSize: 13 }}>
+      {label}
+    </div>
+  );
+}
+
+function buildHeatmapGrid(heatmap: { date: string; count: number }[]) {
+  const map = new Map(heatmap.map((h) => [h.date, h.count]));
+  const today = new Date();
+  // Find last Sunday >= today
+  const endDay = new Date(today);
+  endDay.setDate(today.getDate() + (6 - today.getDay()));
+  // Start Sunday 52 weeks before
+  const startDay = new Date(endDay);
+  startDay.setDate(endDay.getDate() - 364);
+  // Align to Sunday
+  startDay.setDate(startDay.getDate() - startDay.getDay());
+
+  const weeks: { date: string; count: number }[][] = [];
+  const cur = new Date(startDay);
+  while (cur <= endDay) {
+    const week: { date: string; count: number }[] = [];
+    for (let d = 0; d < 7; d++) {
+      const ds = localDateStrLib(cur);
+      week.push({ date: ds, count: map.get(ds) ?? 0 });
+      cur.setDate(cur.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+function TabStats() {
+  const [stats, setStats] = useState<LibraryStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/library/stats")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && d.kpis) setStats(d);
+        else setError(d?.error ?? "Erreur de chargement");
+      })
+      .catch(() => setError("Erreur réseau"));
+  }, []);
+
+  if (error) return <div style={{ padding: 32, color: "var(--red)", fontSize: 13 }}>{error}</div>;
+  if (!stats) return <div style={{ textAlign: "center", padding: 48, color: "var(--text-muted)", fontSize: 13 }}>Chargement des statistiques...</div>;
+
+  const { kpis, heatmap, finishedByMonth, genreDistribution, speedByGenre, ratingByQuarter, topAuthors, backlogByGenre, startedVsFinished } = stats;
+  const heatmapWeeks = buildHeatmapGrid(heatmap);
+
+  const kpiCards = [
+    { label: "Livres lus", value: kpis.total_lu, color: "#6366f1" },
+    { label: "En cours", value: kpis.total_en_cours, color: "#f59e0b" },
+    { label: "Rythme mensuel", value: `${kpis.avg_monthly_rhythm} /mois`, color: "#10b981" },
+    { label: "Vitesse moy.", value: kpis.avg_speed_days != null ? `${kpis.avg_speed_days}j` : "—", color: "#3b82f6" },
+  ];
+
+  const heatColors = ["var(--surface2)", "#c7d2fe", "#818cf8", "#6366f1", "#4338ca"];
+  function heatColor(count: number) {
+    if (count === 0) return heatColors[0];
+    if (count === 1) return heatColors[1];
+    if (count === 2) return heatColors[2];
+    if (count === 3) return heatColors[3];
+    return heatColors[4];
+  }
+
+  const showRatingChart = ratingByQuarter.filter((r) => r.count >= 1).length >= 5;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        {kpiCards.map((k) => (
+          <div key={k.label} style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow-sm)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>{k.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: k.color }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {kpis.best_serie && (
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "14px 20px", boxShadow: "var(--shadow-sm)", display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 20 }}>🏆</span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>Meilleure série</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginTop: 2 }}>{kpis.best_serie.name} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>— {kpis.best_serie.count} livres lus</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* Heatmap */}
+      <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 12 }}>Lectures — 365 derniers jours</div>
+        <div style={{ display: "flex", gap: 3, overflowX: "auto" }}>
+          {heatmapWeeks.map((week, wi) => (
+            <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              {week.map((day) => (
+                <div
+                  key={day.date}
+                  title={`${day.date}${day.count > 0 ? ` — ${day.count} livre(s) en cours` : ""}`}
+                  style={{ width: 11, height: 11, borderRadius: 2, background: heatColor(day.count), flexShrink: 0 }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8, fontSize: 10, color: "var(--text-muted)" }}>
+          <span>Moins</span>
+          {heatColors.map((c, i) => (
+            <div key={i} style={{ width: 10, height: 10, borderRadius: 2, background: c, border: "1px solid var(--border)" }} />
+          ))}
+          <span>Plus</span>
+        </div>
+      </div>
+
+      {/* Books/month + Started vs Finished */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Livres terminés / mois</div>
+          {finishedByMonth.every((r) => r.count === 0) ? <NoData /> : (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={finishedByMonth} margin={{ left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="month" tickFormatter={fmtMonth} tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} allowDecimals={false} />
+                <Tooltip formatter={(v) => [v, "Terminés"]} labelFormatter={fmtMonth} contentStyle={{ fontSize: 12, background: "var(--surface)", border: "1px solid var(--border)" }} />
+                <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Commencés vs terminés / mois</div>
+          {startedVsFinished.every((r) => r.started === 0 && r.finished === 0) ? <NoData /> : (
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={startedVsFinished} margin={{ left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="month" tickFormatter={fmtMonth} tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} allowDecimals={false} />
+                <Tooltip labelFormatter={fmtMonth} contentStyle={{ fontSize: 12, background: "var(--surface)", border: "1px solid var(--border)" }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="started" name="Commencés" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="finished" name="Terminés" stroke="#6366f1" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Genre donut + Speed by genre */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Genres lus</div>
+          {genreDistribution.length === 0 ? <NoData /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={genreDistribution} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={75} innerRadius={40} paddingAngle={2}>
+                  {genreDistribution.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v, n) => [v, n]} contentStyle={{ fontSize: 12, background: "var(--surface)", border: "1px solid var(--border)" }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Vitesse de lecture par genre (jours)</div>
+          {speedByGenre.length === 0 ? <NoData /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={speedByGenre} layout="vertical" margin={{ left: 0, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} width={120} />
+                <Tooltip formatter={(v) => [`${v}j`, "Moy."]} contentStyle={{ fontSize: 12, background: "var(--surface)", border: "1px solid var(--border)" }} />
+                <Bar dataKey="avg_days" fill="#10b981" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Top authors + Backlog */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Top auteurs lus</div>
+          {topAuthors.length === 0 ? <NoData /> : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={topAuthors} layout="vertical" margin={{ left: 0, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "var(--text-muted)" }} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} width={120} />
+                <Tooltip formatter={(v, n) => [v, n === "book_count" ? "Livres" : "Note moy."]} contentStyle={{ fontSize: 12, background: "var(--surface)", border: "1px solid var(--border)" }} />
+                <Bar dataKey="book_count" name="book_count" fill="#6366f1" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Backlog par genre</div>
+          {backlogByGenre.length === 0 ? <NoData /> : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={backlogByGenre} layout="vertical" margin={{ left: 0, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "var(--text-muted)" }} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} width={120} />
+                <Tooltip contentStyle={{ fontSize: 12, background: "var(--surface)", border: "1px solid var(--border)" }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="souhait" name="Souhait" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="pas_lu" name="Pas lu" stackId="a" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Rating by quarter */}
+      {showRatingChart && (
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", boxShadow: "var(--shadow-sm)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Note moyenne par trimestre</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={ratingByQuarter} margin={{ left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="quarter" tickFormatter={fmtQuarter} tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+              <YAxis domain={[0, 5]} tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+              <Tooltip formatter={(v, n) => [v, n === "avg_rating" ? "Note moy." : "Livres"]} labelFormatter={fmtQuarter} contentStyle={{ fontSize: 12, background: "var(--surface)", border: "1px solid var(--border)" }} />
+              <Line type="monotone" dataKey="avg_rating" name="avg_rating" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: "#f59e0b" }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────── Main Page ────────────────────────────────────
 
 export default function LibraryPage() {
@@ -1040,6 +1322,7 @@ export default function LibraryPage() {
     { key: "genres", label: "Genres", count: genresList.length },
     { key: "series", label: "Séries", count: seriesList.length },
     { key: "notes", label: "Notes", count: notesList.length },
+    { key: "stats", label: "Statistiques" },
   ];
 
   return (
@@ -1079,6 +1362,7 @@ export default function LibraryPage() {
           {tab === "genres" && <TabGenres genres={genresList} books={booksList} onUpdate={loadAll} />}
           {tab === "series" && <TabSeries seriesList={seriesList} books={booksList} authors={authorsList} onUpdate={loadAll} />}
           {tab === "notes" && <TabNotes notes={notesList} books={booksList} onUpdate={loadAll} />}
+          {tab === "stats" && <TabStats />}
         </>
       )}
     </main>

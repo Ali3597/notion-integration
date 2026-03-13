@@ -41,6 +41,7 @@ export async function POST(request: Request) {
   try {
     const { name, status, project_id } = await request.json();
     if (!name) return NextResponse.json({ error: "name requis" }, { status: 400 });
+    if (!project_id) return NextResponse.json({ error: "project_id requis" }, { status: 400 });
 
     let issue_number: number | undefined;
     if (project_id) {

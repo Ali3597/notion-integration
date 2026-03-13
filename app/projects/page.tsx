@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { DBProject } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
+import { ColFilterHeader } from "@/components/ColFilterHeader";
 import {
   BarChart,
   Bar,
@@ -15,63 +16,6 @@ import {
   Cell,
 } from "recharts";
 
-// ─────────────────────────── Column filter header ─────────────────────────
-
-function ColFilterHeader({ label, options, value, onChange, thStyle }: {
-  label: string;
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (v: string) => void;
-  thStyle?: React.CSSProperties;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLTableCellElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const isActive = value !== "";
-
-  return (
-    <th ref={ref}
-      style={{ ...thStyle, cursor: "pointer", position: "relative", userSelect: "none" }}
-      onClick={() => setOpen((v) => !v)}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        {label}
-        {isActive && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--accent)", display: "inline-block", flexShrink: 0 }} />}
-        <span style={{ fontSize: 7, opacity: 0.5 }}>{open ? "▲" : "▼"}</span>
-      </span>
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 2px)", left: 0, zIndex: 300,
-          background: "var(--surface)", border: "1.5px solid var(--border)",
-          borderRadius: 8, boxShadow: "var(--shadow-md)", minWidth: 160,
-          overflow: "hidden", fontWeight: "normal", letterSpacing: "normal",
-          textTransform: "none", fontSize: 12,
-        }} onClick={(e) => e.stopPropagation()}>
-          {options.map((opt) => (
-            <div key={opt.value}
-              style={{ padding: "8px 14px", cursor: "pointer",
-                color: value === opt.value ? "var(--accent)" : "var(--text)",
-                fontWeight: value === opt.value ? 600 : 400,
-                background: "transparent" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--bg)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-              onClick={() => { onChange(opt.value); setOpen(false); }}>
-              {opt.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </th>
-  );
-}
 
 const STATUS_OPTIONS = ["Non commencé", "En cours", "En pause", "Terminé"];
 const TYPE_OPTIONS = ["Perso", "Pro", "Apprentissage", "Side project"];

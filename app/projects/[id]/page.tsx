@@ -371,7 +371,7 @@ function KanbanColumn({
 
 // ─────────────────────────── Stats section ────────────────────────────────
 
-function StatsSection({ projectId }: { projectId: string }) {
+function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey: number }) {
   const [stats, setStats] = useState<ProjectStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -380,7 +380,7 @@ function StatsSection({ projectId }: { projectId: string }) {
       .then((r) => r.json())
       .then((d) => { setStats(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   if (loading) return (
     <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
@@ -560,6 +560,7 @@ export default function ProjectKanbanPage() {
     "Terminé": [],
   });
   const [loading, setLoading] = useState(true);
+  const [statsKey, setStatsKey] = useState(0);
   const [activeTask, setActiveTask] = useState<DBTask | null>(null);
   const dragFromColRef = useRef<string | null>(null);
 
@@ -584,6 +585,7 @@ export default function ProjectKanbanPage() {
       "Terminé":      taskList.filter((t) => t.status === "Terminé"),
     });
     setLoading(false);
+    setStatsKey((k) => k + 1);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -778,7 +780,7 @@ export default function ProjectKanbanPage() {
       </DndContext>
 
       {/* Stats section */}
-      <StatsSection projectId={id} />
+      <StatsSection projectId={id} refreshKey={statsKey} />
 
       {/* Task modal */}
       <TaskModal
