@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { DBProject } from "@/types";
+import { CustomSelect } from "@/components/CustomSelect";
 
 // ─────────────────────────── Column filter header ─────────────────────────
 
@@ -74,8 +75,6 @@ type TaskSummary = {
   id: string;
   name: string;
   status: string | null;
-  total_minutes: number;
-  session_count: number;
 };
 
 function formatMinutes(min: number) {
@@ -205,16 +204,20 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
         </div>
         <div style={dp.fieldGroup}>
           <label style={dp.label}>Statut</label>
-          <select value={status} onChange={e => setStatus(e.target.value)} style={dp.select}>
-            {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-          </select>
+          <CustomSelect
+            value={status}
+            onChange={setStatus}
+            options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
+          />
         </div>
         <div style={dp.fieldGroup}>
           <label style={dp.label}>Type</label>
-          <select value={type} onChange={e => setType(e.target.value)} style={dp.select}>
-            <option value="">—</option>
-            {TYPE_OPTIONS.map(t => <option key={t}>{t}</option>)}
-          </select>
+          <CustomSelect
+            value={type}
+            onChange={setType}
+            placeholder="—"
+            options={[{ value: "", label: "—" }, ...TYPE_OPTIONS.map((t) => ({ value: t, label: t }))]}
+          />
         </div>
 
         {!hasChildren && (
@@ -292,9 +295,6 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
                     textDecoration: t.status === "Terminé" ? "line-through" : "none",
                   }}>
                     {t.name}
-                  </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {formatMinutes(t.total_minutes ?? 0)}
                   </span>
                 </div>
               ))}
@@ -424,13 +424,17 @@ export default function ProjectsPage() {
             style={styles.input}
             autoFocus
           />
-          <select value={newStatus} onChange={e => setNewStatus(e.target.value)} style={styles.select}>
-            {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-          </select>
-          <select value={newType} onChange={e => setNewType(e.target.value)} style={styles.select}>
-            <option value="">— Type —</option>
-            {TYPE_OPTIONS.map(t => <option key={t}>{t}</option>)}
-          </select>
+          <CustomSelect
+            value={newStatus}
+            onChange={setNewStatus}
+            options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
+          />
+          <CustomSelect
+            value={newType}
+            onChange={setNewType}
+            placeholder="— Type —"
+            options={[{ value: "", label: "— Type —" }, ...TYPE_OPTIONS.map((t) => ({ value: t, label: t }))]}
+          />
           <ParentMultiSelect value={newParentIds} onChange={setNewParentIds} projects={projects} excludeIds={[]} />
           <button className="btn-primary" style={styles.btnPrimary} type="submit" disabled={saving}>
             {saving ? "Création..." : "Créer"}

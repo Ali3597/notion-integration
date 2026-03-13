@@ -3,15 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { DBTask, DBProject } from "@/types";
+import { CustomSelect } from "@/components/CustomSelect";
 
-const STATUS_OPTIONS = ["À faire", "Non commencé", "En cours", "Terminé"];
+const STATUS_OPTIONS = ["Non commencé", "En cours", "Terminé"];
 const PRIORITY_OPTIONS = ["High", "Medium", "Low"];
-
-function formatMinutes(min: number) {
-  if (!min || min === 0) return "—";
-  if (min < 60) return `${Math.round(min)}min`;
-  return `${Math.floor(min / 60)}h${min % 60 > 0 ? String(Math.round(min % 60)).padStart(2, "0") : ""}`;
-}
 
 // ─────────────────────────── Column filter header ─────────────────────────
 
@@ -71,6 +66,27 @@ function ColFilterHeader({ label, options, value, onChange, thStyle }: {
   );
 }
 
+// ─────────────────────────── Checkbox ────────────────────────────────────
+
+function TaskCheckbox({ done, onChange }: { done: boolean; onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      title={done ? "Marquer non terminé" : "Marquer terminé"}
+      style={{
+        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+        border: done ? "none" : "1.5px solid var(--border)",
+        background: done ? "var(--green)" : "transparent",
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.15s",
+      }}
+    >
+      {done && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>}
+    </button>
+  );
+}
+
 // ─────────────────────────── Page ─────────────────────────────────────────
 
 export default function TasksPage() {
@@ -84,7 +100,7 @@ export default function TasksPage() {
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newStatus, setNewStatus] = useState("À faire");
+  const [newStatus, setNewStatus] = useState("Non commencé");
   const [newPriority, setNewPriority] = useState("Medium");
   const [newProjectId, setNewProjectId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -114,12 +130,29 @@ export default function TasksPage() {
     if (pid) setFilterProject(pid);
   }, []);
 
-  const filtered = tasks.filter((t) => {
-    if (filterStatus && t.status !== filterStatus) return false;
-    if (filterPriority && t.priority !== filterPriority) return false;
-    if (filterProject && t.project_id !== filterProject) return false;
-    return true;
-  });
+  // Filter then sort: non-terminé first, terminé at the bottom
+  const filtered = tasks
+    .filter((t) => {
+      if (filterStatus && t.status !== filterStatus) return false;
+      if (filterPriority && t.priority !== filterPriority) return false;
+      if (filterProject && t.project_id !== filterProject) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const aD = a.status === "Terminé" ? 1 : 0;
+      const bD = b.status === "Terminé" ? 1 : 0;
+      return aD - bD;
+    });
+
+  async function handleToggleDone(t: DBTask) {
+    const newStatus = t.status === "Terminé" ? "Non commencé" : "Terminé";
+    await fetch(`/api/pomodoro/tasks?id=${t.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    load();
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -174,16 +207,23 @@ export default function TasksPage() {
         <form onSubmit={handleCreate} style={styles.form}>
           <input type="text" placeholder="Nom de la tâche" value={newName}
             onChange={(e) => setNewName(e.target.value)} style={styles.input} autoFocus />
-          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} style={styles.select}>
-            {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-          </select>
-          <select value={newPriority} onChange={(e) => setNewPriority(e.target.value)} style={styles.select}>
-            {PRIORITY_OPTIONS.map((p) => <option key={p}>{p}</option>)}
-          </select>
-          <select value={newProjectId} onChange={(e) => setNewProjectId(e.target.value)} style={styles.select}>
-            <option value="">— Projet —</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <CustomSelect
+            value={newStatus}
+            onChange={setNewStatus}
+            options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
+          />
+          <CustomSelect
+            value={newPriority}
+            onChange={setNewPriority}
+            options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))}
+          />
+          <CustomSelect
+            value={newProjectId}
+            onChange={setNewProjectId}
+            placeholder="— Projet —"
+            searchable
+            options={[{ value: "", label: "— Projet —" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+          />
           <button className="btn-primary" style={styles.btnPrimary} type="submit" disabled={saving}>
             {saving ? "Création..." : "Créer"}
           </button>
@@ -194,6 +234,7 @@ export default function TasksPage() {
         <table style={styles.table}>
           <thead>
             <tr>
+              <th style={{ ...styles.th, width: 32 }}></th>
               <th style={styles.th}>Tâche</th>
               <ColFilterHeader label="Statut"
                 options={[{ value: "", label: "Tous" }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s }))]}
@@ -204,39 +245,47 @@ export default function TasksPage() {
               <ColFilterHeader label="Projet"
                 options={projectOptions}
                 value={filterProject} onChange={setFilterProject} thStyle={styles.th} />
-              <th style={{ ...styles.th, textAlign: "right" }}>Sessions</th>
-              <th style={{ ...styles.th, textAlign: "right" }}>Total</th>
               <th style={styles.th}></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={styles.emptyCell}>Chargement...</td></tr>
+              <tr><td colSpan={6} style={styles.emptyCell}>Chargement...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} style={styles.emptyCell}>Aucune tâche</td></tr>
-            ) : filtered.map((t) => (
-              editingId === t.id ? (
+              <tr><td colSpan={6} style={styles.emptyCell}>Aucune tâche</td></tr>
+            ) : filtered.map((t) => {
+              const done = t.status === "Terminé";
+              return editingId === t.id ? (
                 <tr key={t.id} style={styles.tr}>
+                  <td style={styles.td}></td>
                   <td style={styles.td}>
                     <input value={editValues.name ?? t.name}
                       onChange={(e) => setEditValues((v) => ({ ...v, name: e.target.value }))}
                       style={styles.inlineInput} />
                   </td>
                   <td style={styles.td}>
-                    <select value={editValues.status ?? t.status ?? ""}
-                      onChange={(e) => setEditValues((v) => ({ ...v, status: e.target.value }))}
-                      style={styles.inlineSelect}>
-                      {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-                    </select>
+                    <CustomSelect
+                      value={editValues.status ?? t.status ?? ""}
+                      onChange={(v) => setEditValues((ev) => ({ ...ev, status: v }))}
+                      options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
+                    />
                   </td>
                   <td style={styles.td}>
-                    <select value={editValues.priority ?? t.priority ?? ""}
-                      onChange={(e) => setEditValues((v) => ({ ...v, priority: e.target.value }))}
-                      style={styles.inlineSelect}>
-                      {PRIORITY_OPTIONS.map((p) => <option key={p}>{p}</option>)}
-                    </select>
+                    <CustomSelect
+                      value={editValues.priority ?? t.priority ?? ""}
+                      onChange={(v) => setEditValues((ev) => ({ ...ev, priority: v }))}
+                      options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))}
+                    />
                   </td>
-                  <td style={styles.td} colSpan={3}></td>
+                  <td style={styles.td}>
+                    <CustomSelect
+                      value={editValues.project_id ?? t.project_id ?? ""}
+                      onChange={(v) => setEditValues((ev) => ({ ...ev, project_id: v || null }))}
+                      placeholder="— Aucun —"
+                      searchable
+                      options={[{ value: "", label: "— Aucun —" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+                    />
+                  </td>
                   <td style={styles.td}>
                     <div style={styles.actions}>
                       <button style={styles.btnSave} onClick={() => handleSaveEdit(t.id)}>✓</button>
@@ -245,31 +294,30 @@ export default function TasksPage() {
                   </td>
                 </tr>
               ) : (
-                <tr key={t.id} style={styles.tr}>
-                  <td style={{ ...styles.td, fontWeight: 500 }}>{t.name}</td>
+                <tr key={t.id} style={{ ...styles.tr, opacity: done ? 0.5 : 1 }}>
+                  <td style={{ ...styles.td, paddingRight: 0 }}>
+                    <TaskCheckbox done={done} onChange={() => handleToggleDone(t)} />
+                  </td>
+                  <td style={{ ...styles.td, fontWeight: 500, textDecorationLine: done ? "line-through" : "none", color: done ? "var(--text-muted)" : "var(--text)" }}>
+                    {t.name}
+                  </td>
                   <td style={styles.td}>
                     <span style={{ ...styles.badge, background: statusColor(t.status) }}>{t.status ?? "—"}</span>
                   </td>
                   <td style={styles.td}>{priorityIcon(t.priority)} {t.priority ?? "—"}</td>
                   <td style={{ ...styles.td, color: "var(--text-muted)" }}>{t.project_name ?? "—"}</td>
-                  <td style={{ ...styles.td, textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                    {t.session_count ?? 0}
-                  </td>
-                  <td style={{ ...styles.td, textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--accent)" }}>
-                    {formatMinutes(t.total_minutes ?? 0)}
-                  </td>
                   <td style={styles.td}>
                     <div style={styles.actions}>
                       <button style={styles.btnEdit}
-                        onClick={() => { setEditingId(t.id); setEditValues({ name: t.name, status: t.status ?? "", priority: t.priority ?? "" }); }}>
+                        onClick={() => { setEditingId(t.id); setEditValues({ name: t.name, status: t.status ?? "", priority: t.priority ?? "", project_id: t.project_id ?? "" }); }}>
                         ✎
                       </button>
                       <button style={styles.btnDelete} onClick={() => handleDelete(t.id)}>✕</button>
                     </div>
                   </td>
                 </tr>
-              )
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

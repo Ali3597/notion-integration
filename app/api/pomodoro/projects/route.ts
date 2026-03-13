@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { projects, tasks, sessions, project_relations } from "@/lib/schema";
-import { eq, sql, and, or } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
   try {
-    // 1. Direct stats per project (own tasks/sessions only)
+    // 1. Direct stats per project (own sessions + task count)
     const rows = await db
       .select({
         id: projects.id,
@@ -19,7 +19,7 @@ export async function GET() {
       })
       .from(projects)
       .leftJoin(tasks, eq(tasks.project_id, projects.id))
-      .leftJoin(sessions, eq(sessions.task_id, tasks.id))
+      .leftJoin(sessions, eq(sessions.project_id, projects.id))
       .groupBy(projects.id)
       .orderBy(projects.name);
 

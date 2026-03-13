@@ -1,15 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import type { DBProject, DBTask, DBSession } from "@/types";
-
-type Mode = "work" | "break";
-
-const MODES = {
-  work: { label: "Focus", defaultMin: 25, color: "var(--accent)" },
-  break: { label: "Pause", defaultMin: 5, color: "var(--accent2)" },
-};
+import { usePomodoroContext, MODES } from "@/lib/pomodoro-context";
+import type { Mode } from "@/lib/pomodoro-context";
+import { CustomSelect } from "@/components/CustomSelect";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -29,147 +23,22 @@ function formatDate(iso: string | null) {
 }
 
 export default function PomodoroPage() {
-  const [projects, setProjects] = useState<DBProject[]>([]);
-  const [tasks, setTasks] = useState<DBTask[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>("");
-  const [selectedTask, setSelectedTask] = useState<string>("");
+  const {
+    projects, sessions, todayStats, loadingProjects,
+    selectedProject, mode, secondsLeft, running,
+    workMin, breakMin, sessionCount, notes, saving, lastSaved,
+    sessionStart,
+    setSelectedProject, setMode, setWorkMin, setBreakMin, setNotes,
+    handleStart, handlePause, handleReset, handleFinish, handleSkip,
+    loadSessions,
+  } = usePomodoroContext();
 
-  const [workMin, setWorkMin] = useState(25);
-  const [breakMin, setBreakMin] = useState(5);
-  const [mode, setMode] = useState<Mode>("work");
-  const [secondsLeft, setSecondsLeft] = useState(workMin * 60);
-  const [running, setRunning] = useState(false);
-  const [sessionCount, setSessionCount] = useState(0);
+  async function handleDeleteSession(id: string) {
+    await fetch(`/api/pomodoro/sessions?id=${id}`, { method: "DELETE" });
+    loadSessions();
+  }
 
-  const startTimeRef = useRef<string | null>(null);
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<string | null>(null);
-
-  const [sessions, setSessions] = useState<DBSession[]>([]);
-  const [todayStats, setTodayStats] = useState<{ session_count: number; total_minutes: number } | null>(null);
-  const [loadingProjects, setLoadingProjects] = useState(true);
-  const [loadingTasks, setLoadingTasks] = useState(false);
-
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    fetch("/api/pomodoro/projects")
-      .then((r) => r.json())
-      .then((data) => { setProjects(Array.isArray(data) ? data : []); setLoadingProjects(false); })
-      .catch(() => setLoadingProjects(false));
-  }, []);
-
-  useEffect(() => {
-    if (!selectedProject) { setTasks([]); setSelectedTask(""); return; }
-    setLoadingTasks(true);
-    setSelectedTask("");
-    fetch(`/api/pomodoro/tasks?projectId=${selectedProject}`)
-      .then((r) => r.json())
-      .then((data) => { setTasks(Array.isArray(data) ? data : []); setLoadingTasks(false); })
-      .catch(() => setLoadingTasks(false));
-  }, [selectedProject]);
-
-  const loadSessions = useCallback(() => {
-    fetch("/api/pomodoro/sessions")
-      .then((r) => r.json())
-      .then((data) => setSessions(Array.isArray(data) ? data : []))
-      .catch(() => {});
-    fetch("/api/pomodoro/today-stats")
-      .then((r) => r.json())
-      .then((data) => setTodayStats(data))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => { loadSessions(); }, [loadSessions]);
-
-  useEffect(() => {
-    if (!running) setSecondsLeft(mode === "work" ? workMin * 60 : breakMin * 60);
-  }, [workMin, breakMin, mode, running]);
-
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = setInterval(() => {
-        setSecondsLeft((s) => {
-          if (s <= 1) {
-            clearInterval(intervalRef.current!);
-            handleTimerEnd();
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [running]);
-
-  const handleTimerEnd = useCallback(() => {
-    setRunning(false);
-    playSound();
-    if (mode === "work") {
-      setSessionCount((c) => c + 1);
-      if (selectedTask && startTimeRef.current) {
-        saveSession(startTimeRef.current, new Date().toISOString());
-      }
-    }
-    setMode((m) => m === "work" ? "break" : "work");
-    startTimeRef.current = null;
-  }, [mode, selectedTask]);
-
-  const playSound = () => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.8);
-    } catch {}
-  };
-
-  const saveSession = async (start: string, end: string) => {
-    if (!selectedTask) return;
-    setSaving(true);
-    try {
-      await fetch("/api/pomodoro/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId: selectedTask, startTime: start, endTime: end, notes }),
-      });
-      setLastSaved(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
-      setNotes("");
-      loadSessions();
-    } catch {}
-    setSaving(false);
-  };
-
-  const handleStart = () => {
-    if (!selectedTask) return;
-    if (!running) startTimeRef.current = new Date().toISOString();
-    setRunning(true);
-  };
-
-  const handlePause = () => setRunning(false);
-
-  const handleReset = () => {
-    setRunning(false);
-    startTimeRef.current = null;
-    setSecondsLeft(mode === "work" ? workMin * 60 : breakMin * 60);
-  };
-
-  const handleSkip = () => {
-    setRunning(false);
-    startTimeRef.current = null;
-    const next: Mode = mode === "work" ? "break" : "work";
-    setMode(next);
-    setSecondsLeft(next === "work" ? workMin * 60 : breakMin * 60);
-  };
+  const hasActiveSession = sessionStart !== null;
 
   const total = mode === "work" ? workMin * 60 : breakMin * 60;
   const progress = ((total - secondsLeft) / total) * 100;
@@ -189,36 +58,14 @@ export default function PomodoroPage() {
 
         <div style={styles.section}>
           <label style={styles.label}>Projet</label>
-          <select
+          <CustomSelect
             value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value)}
+            onChange={setSelectedProject}
             disabled={loadingProjects || running}
-          >
-            <option value="">{loadingProjects ? "Chargement..." : "— Sélectionner un projet —"}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div style={styles.section}>
-          <label style={styles.label}>Tâche</label>
-          <select
-            value={selectedTask}
-            onChange={(e) => setSelectedTask(e.target.value)}
-            disabled={!selectedProject || loadingTasks || running}
-          >
-            <option value="">
-              {!selectedProject ? "Sélectionner un projet d'abord" :
-                loadingTasks ? "Chargement..." : "— Sélectionner une tâche —"}
-            </option>
-            {tasks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.priority === "High" ? "🔴 " : t.priority === "Medium" ? "🟡 " : "🟢 "}
-                {t.name}
-              </option>
-            ))}
-          </select>
+            placeholder={loadingProjects ? "Chargement..." : "— Sélectionner un projet —"}
+            searchable
+            options={projects.map((p) => ({ value: p.id, label: p.name }))}
+          />
         </div>
 
         <div style={styles.section}>
@@ -287,7 +134,7 @@ export default function PomodoroPage() {
           {(Object.keys(MODES) as Mode[]).map((m) => (
             <button
               key={m}
-              onClick={() => { if (!running) { setMode(m); startTimeRef.current = null; } }}
+              onClick={() => { if (!running) { setMode(m); } }}
               style={{
                 ...styles.modeTab,
                 ...(mode === m ? { background: modeColor, color: "#fff" } : {}),
@@ -310,33 +157,49 @@ export default function PomodoroPage() {
               {pad(Math.floor(secondsLeft / 60))}:{pad(secondsLeft % 60)}
             </div>
             <div style={styles.timerMode}>{MODES[mode].label.toUpperCase()}</div>
-            {!selectedTask && <div style={styles.timerWarning}>Sélectionne une tâche</div>}
+            {!selectedProject && <div style={styles.timerWarning}>Sélectionne un projet</div>}
           </div>
         </div>
 
         <div style={styles.controls}>
-          <button onClick={handleReset} style={styles.btnSecondary} title="Reset">↺</button>
           {running ? (
             <button onClick={handlePause} className="btn-primary"
               style={{ ...styles.btnPrimary, background: modeColor }}>
               ⏸ Pause
             </button>
+          ) : hasActiveSession ? (
+            // Paused mid-session: show Annuler / Reprendre / Terminer
+            <>
+              <button onClick={handleReset} style={styles.btnDanger}>
+                ✕ Annuler
+              </button>
+              <button onClick={handleStart} className="btn-primary"
+                style={{ ...styles.btnPrimary, background: modeColor }}>
+                ▶ Reprendre
+              </button>
+              <button onClick={handleFinish} style={styles.btnSuccess}>
+                ✓ Terminer
+              </button>
+            </>
           ) : (
-            <button onClick={handleStart} className="btn-primary"
-              style={{
-                ...styles.btnPrimary,
-                background: selectedTask ? modeColor : "var(--border)",
-                boxShadow: selectedTask ? "0 4px 14px rgba(59, 126, 248, 0.35), 0 1px 3px rgba(0,0,0,0.1)" : "none",
-                color: selectedTask ? "#ffffff" : "var(--text-muted)",
-                cursor: selectedTask ? "pointer" : "not-allowed",
-              }}>
-              ▶ Start
-            </button>
+            <>
+              <button onClick={handleReset} style={styles.btnSecondary} title="Reset">↺</button>
+              <button onClick={handleStart} className="btn-primary"
+                style={{
+                  ...styles.btnPrimary,
+                  background: selectedProject ? modeColor : "var(--border)",
+                  boxShadow: selectedProject ? "0 4px 14px rgba(59, 126, 248, 0.35), 0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  color: selectedProject ? "#ffffff" : "var(--text-muted)",
+                  cursor: selectedProject ? "pointer" : "not-allowed",
+                }}>
+                ▶ Start
+              </button>
+              <button onClick={handleSkip} style={styles.btnSecondary} title="Passer">⏭</button>
+            </>
           )}
-          <button onClick={handleSkip} style={styles.btnSecondary} title="Passer">⏭</button>
         </div>
 
-        {/* Today's sessions table */}
+        {/* Recent sessions table */}
         {sessions.length > 0 && (
           <div style={styles.sessionsTable}>
             <div style={styles.sectionTitle}>Dernières sessions</div>
@@ -344,20 +207,30 @@ export default function PomodoroPage() {
               <table style={styles.table}>
                 <thead>
                   <tr>
-                    <th style={styles.th}>Tâche</th>
                     <th style={styles.th}>Projet</th>
                     <th style={styles.th}>Début</th>
+                    <th style={styles.th}>Fin</th>
                     <th style={{ ...styles.th, textAlign: "right" }}>Durée</th>
+                    <th style={{ ...styles.th, width: 36 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {sessions.map((s) => (
                     <tr key={s.id} style={styles.tr}>
-                      <td style={styles.td}>{s.task_name ?? s.name ?? "—"}</td>
-                      <td style={styles.td}>{s.project_name ?? "—"}</td>
+                      <td style={styles.td}>{s.project_name ?? s.name ?? "—"}</td>
                       <td style={styles.td}>{formatDate(s.start_time)}</td>
+                      <td style={styles.td}>{formatDate(s.end_time)}</td>
                       <td style={{ ...styles.td, textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--accent)" }}>
                         {formatDuration(s.duration_min)}
+                      </td>
+                      <td style={{ ...styles.td, textAlign: "center" }}>
+                        <button
+                          onClick={() => handleDeleteSession(s.id)}
+                          title="Supprimer"
+                          style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", padding: "2px 6px", borderRadius: 6, lineHeight: 1 }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--red)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(220,38,38,0.07)"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)"; (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
+                        >✕</button>
                       </td>
                     </tr>
                   ))}
@@ -377,18 +250,22 @@ export default function PomodoroPage() {
           <div style={styles.sessionList}>
             {sessions.map((s) => (
               <div key={s.id} style={styles.sessionCard}>
-                <div style={styles.sessionName}>{s.task_name ?? s.name ?? "Session"}</div>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
+                  <div style={styles.sessionName}>{s.project_name ?? s.name ?? "Session"}</div>
+                  <button
+                    onClick={() => handleDeleteSession(s.id)}
+                    title="Supprimer"
+                    style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", padding: "1px 4px", borderRadius: 5, flexShrink: 0, lineHeight: 1 }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--red)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(220,38,38,0.07)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)"; (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
+                  >✕</button>
+                </div>
                 <div style={styles.sessionMeta}>
                   <span>{formatDate(s.start_time)}</span>
                   <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
                     {formatDuration(s.duration_min)}
                   </span>
                 </div>
-                {s.project_name && (
-                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-                    {s.project_name}
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -463,6 +340,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text-muted)", fontSize: 18,
     display: "flex", alignItems: "center", justifyContent: "center",
     transition: "all 0.2s", cursor: "pointer", boxShadow: "var(--shadow-sm)",
+  },
+  btnDanger: {
+    padding: "12px 22px", borderRadius: 50, fontSize: 14, fontWeight: 600,
+    background: "rgba(220,38,38,0.08)", border: "1.5px solid rgba(220,38,38,0.2)",
+    color: "var(--red)", cursor: "pointer", transition: "all 0.2s",
+  },
+  btnSuccess: {
+    padding: "12px 22px", borderRadius: 50, fontSize: 14, fontWeight: 600,
+    background: "rgba(22,163,74,0.08)", border: "1.5px solid rgba(22,163,74,0.2)",
+    color: "var(--green)", cursor: "pointer", transition: "all 0.2s",
   },
   right: {
     width: 260, minWidth: 260, background: "var(--surface)",

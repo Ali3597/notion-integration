@@ -60,12 +60,11 @@ export async function GET() {
         .from(sessions)
         .where(gte(sessions.start_time, today)),
 
-      // Last task worked on today
+      // Last project worked on today
       db
-        .select({ task_name: tasks.name, project_name: projects.name })
+        .select({ project_name: projects.name })
         .from(sessions)
-        .leftJoin(tasks, eq(sessions.task_id, tasks.id))
-        .leftJoin(projects, eq(tasks.project_id, projects.id))
+        .leftJoin(projects, eq(sessions.project_id, projects.id))
         .where(gte(sessions.start_time, today))
         .orderBy(desc(sessions.start_time))
         .limit(1),
@@ -135,12 +134,9 @@ export async function GET() {
               status: tasks.status,
               priority: tasks.priority,
               project_id: tasks.project_id,
-              total_minutes: sql<number>`coalesce(round(sum(extract(epoch from (${sessions.end_time} - ${sessions.start_time})) / 60)), 0)`,
             })
             .from(tasks)
-            .leftJoin(sessions, eq(sessions.task_id, tasks.id))
             .where(inArray(tasks.project_id, projectIds))
-            .groupBy(tasks.id)
         : [];
 
     // Attach tasks to projects
@@ -162,7 +158,6 @@ export async function GET() {
           id: t.id,
           name: t.name,
           priority: t.priority,
-          total_minutes: Number(t.total_minutes ?? 0),
         })),
         extra_task_count: Math.max(0, pending.length - 3),
       };
@@ -199,7 +194,7 @@ export async function GET() {
       pomodoro: {
         session_count: Number(todayStats[0]?.session_count ?? 0),
         total_minutes: Number(todayStats[0]?.total_minutes ?? 0),
-        last_task: lastSessionRow[0] ?? null,
+        last_project: lastSessionRow[0] ?? null,
       },
       meditation: {
         streak: lastMeditationRow[0]?.streak ?? 0,

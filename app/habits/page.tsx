@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { CustomSelect } from "@/components/CustomSelect";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid,
@@ -1523,15 +1524,11 @@ function HabitFormModal({
           {/* Frequency type */}
           <div>
             <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Fréquence</label>
-            <select
+            <CustomSelect
               value={freqType}
-              onChange={(e) => setFreqType(e.target.value as FreqType)}
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", fontSize: 14 }}
-            >
-              {(Object.entries(FREQ_LABELS) as [FreqType, string][]).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
+              onChange={(v) => setFreqType(v as FreqType)}
+              options={(Object.entries(FREQ_LABELS) as [FreqType, string][]).map(([k, v]) => ({ value: k, label: v }))}
+            />
           </div>
 
           {/* Specific days picker */}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { DBBook, DBAuthor, DBGenre, DBSerie, DBBookNote } from "@/types";
+import { CustomSelect } from "@/components/CustomSelect";
 
 // ─────────────────────────── Constants ────────────────────────────────────
 
@@ -248,27 +249,36 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
           <input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
         </Field>
         <Field label="Auteur">
-          <select value={authorId} onChange={(e) => setAuthorId(e.target.value)} style={selectStyle}>
-            <option value="">— Aucun —</option>
-            {authors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
+          <CustomSelect
+            value={authorId}
+            onChange={setAuthorId}
+            placeholder="— Aucun —"
+            searchable
+            options={[{ value: "", label: "— Aucun —" }, ...authors.map((a) => ({ value: a.id, label: a.name }))]}
+          />
         </Field>
         <Field label="Genre">
-          <select value={genreId} onChange={(e) => setGenreId(e.target.value)} style={selectStyle}>
-            <option value="">— Aucun —</option>
-            {genres.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
+          <CustomSelect
+            value={genreId}
+            onChange={setGenreId}
+            placeholder="— Aucun —"
+            options={[{ value: "", label: "— Aucun —" }, ...genres.map((g) => ({ value: g.id, label: g.name }))]}
+          />
         </Field>
         <Field label="Série">
-          <select value={serieId} onChange={(e) => setSerieId(e.target.value)} style={selectStyle}>
-            <option value="">— Aucune —</option>
-            {seriesList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <CustomSelect
+            value={serieId}
+            onChange={setSerieId}
+            placeholder="— Aucune —"
+            options={[{ value: "", label: "— Aucune —" }, ...seriesList.map((s) => ({ value: s.id, label: s.name }))]}
+          />
         </Field>
         <Field label="Statut">
-          <select value={status} onChange={(e) => setStatus(e.target.value)} style={selectStyle}>
-            {BOOK_STATUSES.map((s) => <option key={s}>{s}</option>)}
-          </select>
+          <CustomSelect
+            value={status}
+            onChange={setStatus}
+            options={BOOK_STATUSES.map((s) => ({ value: s, label: s }))}
+          />
         </Field>
         <Field label="URL couverture">
           <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={inputStyle} placeholder="https://..." />
@@ -449,27 +459,36 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
             <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} style={inputStyle} autoFocus required />
           </Field>
           <Field label="Auteur">
-            <select value={form.author_id} onChange={(e) => setForm((f) => ({ ...f, author_id: e.target.value }))} style={selectStyle}>
-              <option value="">— Aucun —</option>
-              {authors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <CustomSelect
+              value={form.author_id}
+              onChange={(v) => setForm((f) => ({ ...f, author_id: v }))}
+              placeholder="— Aucun —"
+              searchable
+              options={[{ value: "", label: "— Aucun —" }, ...authors.map((a) => ({ value: a.id, label: a.name }))]}
+            />
           </Field>
           <Field label="Genre">
-            <select value={form.genre_id} onChange={(e) => setForm((f) => ({ ...f, genre_id: e.target.value }))} style={selectStyle}>
-              <option value="">— Aucun —</option>
-              {genres.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
+            <CustomSelect
+              value={form.genre_id}
+              onChange={(v) => setForm((f) => ({ ...f, genre_id: v }))}
+              placeholder="— Aucun —"
+              options={[{ value: "", label: "— Aucun —" }, ...genres.map((g) => ({ value: g.id, label: g.name }))]}
+            />
           </Field>
           <Field label="Série">
-            <select value={form.serie_id} onChange={(e) => setForm((f) => ({ ...f, serie_id: e.target.value }))} style={selectStyle}>
-              <option value="">— Aucune —</option>
-              {seriesList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <CustomSelect
+              value={form.serie_id}
+              onChange={(v) => setForm((f) => ({ ...f, serie_id: v }))}
+              placeholder="— Aucune —"
+              options={[{ value: "", label: "— Aucune —" }, ...seriesList.map((s) => ({ value: s.id, label: s.name }))]}
+            />
           </Field>
           <Field label="Statut">
-            <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} style={selectStyle}>
-              {BOOK_STATUSES.map((s) => <option key={s}>{s}</option>)}
-            </select>
+            <CustomSelect
+              value={form.status}
+              onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+              options={BOOK_STATUSES.map((s) => ({ value: s, label: s }))}
+            />
           </Field>
           <Field label="URL couverture">
             <input value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} style={inputStyle} placeholder="https://..." />
@@ -830,16 +849,21 @@ function TabSeries({ seriesList, books, authors, onUpdate }: { seriesList: DBSer
         <form onSubmit={handleAdd}>
           <Field label="Nom *"><input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} style={inputStyle} autoFocus required /></Field>
           <Field label="Auteur">
-            <select value={form.author_id} onChange={(e) => setForm((f) => ({ ...f, author_id: e.target.value }))} style={selectStyle}>
-              <option value="">— Aucun —</option>
-              {authors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <CustomSelect
+              value={form.author_id}
+              onChange={(v) => setForm((f) => ({ ...f, author_id: v }))}
+              placeholder="— Aucun —"
+              searchable
+              options={[{ value: "", label: "— Aucun —" }, ...authors.map((a) => ({ value: a.id, label: a.name }))]}
+            />
           </Field>
           <Field label="État">
-            <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} style={selectStyle}>
-              <option value="">— Aucun —</option>
-              {SERIE_STATUSES.map((s) => <option key={s}>{s}</option>)}
-            </select>
+            <CustomSelect
+              value={form.status}
+              onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+              placeholder="— Aucun —"
+              options={[{ value: "", label: "— Aucun —" }, ...SERIE_STATUSES.map((s) => ({ value: s, label: s }))]}
+            />
           </Field>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button type="button" onClick={() => setAddOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text)", cursor: "pointer" }}>Annuler</button>
@@ -889,10 +913,14 @@ function TabNotes({ notes, books, onUpdate }: { notes: DBBookNote[]; books: DBBo
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
-        <select value={filterBookId} onChange={(e) => setFilterBookId(e.target.value)} style={{ ...selectStyle, width: "auto", minWidth: 180 }}>
-          <option value="">Tous les livres</option>
-          {books.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
-        </select>
+        <CustomSelect
+          value={filterBookId}
+          onChange={setFilterBookId}
+          placeholder="Tous les livres"
+          searchable
+          style={{ width: "auto", minWidth: 180 }}
+          options={[{ value: "", label: "Tous les livres" }, ...books.map((b) => ({ value: b.id, label: b.title }))]}
+        />
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>+ Ajouter une note</button>
       </div>
       <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-md)" }}>
@@ -953,10 +981,14 @@ function TabNotes({ notes, books, onUpdate }: { notes: DBBookNote[]; books: DBBo
         <form onSubmit={handleAdd}>
           <Field label="Titre *"><input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} style={inputStyle} autoFocus required /></Field>
           <Field label="Livre *">
-            <select value={form.book_id} onChange={(e) => setForm((f) => ({ ...f, book_id: e.target.value }))} style={selectStyle} required>
-              <option value="">— Sélectionner un livre —</option>
-              {books.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
-            </select>
+            <CustomSelect
+              value={form.book_id}
+              onChange={(v) => setForm((f) => ({ ...f, book_id: v }))}
+              placeholder="— Sélectionner un livre —"
+              searchable
+              required
+              options={[{ value: "", label: "— Sélectionner un livre —" }, ...books.map((b) => ({ value: b.id, label: b.title }))]}
+            />
           </Field>
           <Field label="Contenu">
             <textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} rows={5} style={{ ...inputStyle, resize: "vertical" }} placeholder="Contenu de la note..." />

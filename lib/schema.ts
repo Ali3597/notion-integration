@@ -21,7 +21,7 @@ export const tasks = pgTable("tasks", {
 export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name"),
-  task_id: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  project_id: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
   start_time: timestamp("start_time"),
   end_time: timestamp("end_time"),
   notes: text("notes"),

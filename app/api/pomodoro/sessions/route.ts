@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sessions, tasks, projects } from "@/lib/schema";
+import { sessions, projects } from "@/lib/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
 export async function GET() {
@@ -9,16 +9,15 @@ export async function GET() {
       .select({
         id: sessions.id,
         name: sessions.name,
+        project_id: sessions.project_id,
+        project_name: projects.name,
         start_time: sessions.start_time,
         end_time: sessions.end_time,
         notes: sessions.notes,
-        task_name: tasks.name,
-        project_name: projects.name,
         duration_min: sql<number>`round(extract(epoch from (${sessions.end_time} - ${sessions.start_time})) / 60)`,
       })
       .from(sessions)
-      .leftJoin(tasks, eq(sessions.task_id, tasks.id))
-      .leftJoin(projects, eq(tasks.project_id, projects.id))
+      .leftJoin(projects, eq(sessions.project_id, projects.id))
       .orderBy(desc(sessions.start_time))
       .limit(10);
 
@@ -31,7 +30,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { taskId, startTime, endTime, notes } = await request.json();
+    const { project_id, startTime, endTime, notes } = await request.json();
+    if (!project_id) return NextResponse.json({ error: "project_id requis" }, { status: 400 });
     const now = new Date();
     const name = `Session — ${now.toLocaleDateString("fr-FR", {
       day: "2-digit", month: "2-digit", year: "numeric",
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       .insert(sessions)
       .values({
         name,
-        task_id: taskId ?? null,
+        project_id,
         start_time: startTime ? new Date(startTime) : null,
         end_time: endTime ? new Date(endTime) : null,
         notes: notes ?? null,

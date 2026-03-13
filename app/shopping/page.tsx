@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { CustomSelect } from "@/components/CustomSelect";
 
 // ─────────────────────────── Types ────────────────────────────────────────
 
@@ -224,9 +225,11 @@ function ItemModal({ mode, initial, onClose, onSave }: ModalProps) {
             required autoFocus style={modalStyles.input} placeholder="Nom de l'article" />
 
           <label style={modalStyles.label}>Catégorie</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} style={modalStyles.select}>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <CustomSelect
+            value={category}
+            onChange={setCategory}
+            options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+          />
 
           <label style={modalStyles.label}>Prix estimé (€)</label>
           <input type="number" value={price} onChange={(e) => setPrice(e.target.value)}

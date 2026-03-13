@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePomodoroContext, MODES } from "@/lib/pomodoro-context";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ type ProjectWithTasks = {
 type PomodoroStats = {
   session_count: number;
   total_minutes: number;
-  last_task: { task_name: string | null; project_name: string | null } | null;
+  last_project: { project_name: string | null } | null;
 };
 type MeditationStats = {
   streak: number;
@@ -442,8 +443,19 @@ function ProjectsWidget({ projects }: { projects?: ProjectWithTasks[] }) {
 
 // ── Pomodoro widget ───────────────────────────────────────────────────────────
 
+function pad(n: number) { return String(n).padStart(2, "0"); }
+
 function PomodoroWidget({ pomodoro }: { pomodoro?: PomodoroStats }) {
+  const { running, secondsLeft, mode, selectedProject, projects, todayStats, sessionStart, handlePause, handleStart } = usePomodoroContext();
   const loading = pomodoro === undefined;
+
+  const modeConfig = MODES[mode];
+  const modeColor = modeConfig.color;
+  const projectName = projects.find((p) => p.id === selectedProject)?.name ?? null;
+
+  // Live stats: prefer context (refreshed after each save), fallback to API
+  const sessionCount = todayStats?.session_count ?? pomodoro?.session_count ?? 0;
+  const totalMinutes = todayStats?.total_minutes ?? pomodoro?.total_minutes ?? 0;
 
   return (
     <Widget title="Pomodoro du jour" icon="⏱️">
@@ -453,39 +465,75 @@ function PomodoroWidget({ pomodoro }: { pomodoro?: PomodoroStats }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Live timer indicator */}
+          {selectedProject && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 12px", borderRadius: 10,
+              background: running ? "rgba(59,126,248,0.06)" : "var(--bg)",
+              border: `1.5px solid ${running ? "rgba(59,126,248,0.2)" : "var(--border)"}`,
+            }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                background: modeColor,
+                boxShadow: running ? `0 0 6px ${modeColor}` : "none",
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: modeColor, lineHeight: 1 }}>
+                  {pad(Math.floor(secondsLeft / 60))}:{pad(secondsLeft % 60)}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {modeConfig.label.toUpperCase()} · {projectName}
+                </div>
+              </div>
+              {running ? (
+                <button onClick={handlePause} style={miniBtn}>⏸</button>
+              ) : (
+                <button onClick={handleStart} style={{ ...miniBtn, background: modeColor, color: "#fff", borderColor: modeColor }}>▶</button>
+              )}
+            </div>
+          )}
+
+          {/* Stats */}
           <div style={{ display: "flex", gap: 16 }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, color: "var(--accent)" }}>
-                {pomodoro.session_count}
+                {sessionCount}
               </div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>sessions</div>
             </div>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, color: "var(--accent)" }}>
-                {pomodoro.total_minutes}
+                {totalMinutes}
               </div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>minutes</div>
             </div>
           </div>
-          {pomodoro.last_task?.task_name && (
+
+          {!selectedProject && pomodoro?.last_project?.project_name && (
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              Dernière : <span style={{ color: "var(--text)" }}>{pomodoro.last_task.task_name}</span>
-              {pomodoro.last_task.project_name && (
-                <span> · {pomodoro.last_task.project_name}</span>
-              )}
+              Dernier : <span style={{ color: "var(--text)" }}>{pomodoro.last_project.project_name}</span>
             </div>
           )}
+
           <Link
             href="/pomodoro"
             style={{ display: "block", textAlign: "center", padding: "8px", background: "var(--accent)", color: "white", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none" }}
           >
-            Démarrer une session
+            {selectedProject ? "Voir le timer →" : "Démarrer une session"}
           </Link>
         </div>
       )}
     </Widget>
   );
 }
+
+const miniBtn: React.CSSProperties = {
+  width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+  background: "var(--surface2)", border: "1px solid var(--border)",
+  color: "var(--text-muted)", fontSize: 11, cursor: "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center",
+};
 
 // ── Meditation widget ─────────────────────────────────────────────────────────
 

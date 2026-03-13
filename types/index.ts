@@ -43,18 +43,16 @@ export type DBTask = {
   priority: string | null;
   project_id?: string | null;
   project_name?: string | null;
-  session_count?: number;
-  total_minutes?: number;
 };
 
 export type DBSession = {
   id: string;
   name: string | null;
+  project_id: string | null;
+  project_name: string | null;
   start_time: string | null;
   end_time: string | null;
   notes: string | null;
-  task_name: string | null;
-  project_name: string | null;
   duration_min: number | null;
 };
 
