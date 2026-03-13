@@ -15,7 +15,8 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-
+import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
 
 const STATUS_OPTIONS = ["Non commencé", "En cours", "En pause", "Terminé"];
 const TYPE_OPTIONS = ["Perso", "Pro", "Apprentissage", "Side project"];
@@ -224,9 +225,7 @@ function GlobalStatsSection() {
       {open && (
         <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 16, borderTop: "1px solid var(--border)" }}>
           {loading ? (
-            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
-              Chargement…
-            </div>
+            <div style={{ paddingTop: 16 }}><StatsSkeleton kpiCount={5} /></div>
           ) : error ? (
             <div style={{ padding: "24px 0", textAlign: "center", color: "var(--red)", fontSize: 12 }}>
               {error}
@@ -631,6 +630,7 @@ export default function ProjectsPage() {
 
       <GlobalStatsSection />
 
+      {loading ? <TableSkeleton columns={8} rows={5} /> : (
       <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
@@ -650,9 +650,7 @@ export default function ProjectsPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr><td colSpan={COL_COUNT} style={styles.emptyCell}>Chargement...</td></tr>
-                ) : filteredRows.length === 0 ? (
+                {filteredRows.length === 0 ? (
                   <tr><td colSpan={COL_COUNT} style={styles.emptyCell}>Aucun projet</td></tr>
                 ) : filteredRows.map(({ project: p, indent, parentId }) => {
                   const hasChildren = p.children.length > 0;
@@ -731,6 +729,7 @@ export default function ProjectsPage() {
               </tbody>
             </table>
       </div>
+      )}
     </main>
   );
 }

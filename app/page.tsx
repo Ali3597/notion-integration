@@ -2,17 +2,39 @@ import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import DashboardWidgets from "@/app/_components/DashboardWidgets";
 
-const navItems = [
-  { href: "/", icon: "🏠", label: "Dashboard", active: true },
-  { href: "/pomodoro", icon: "⏱️", label: "Pomodoro" },
-  { href: "/projects", icon: "📁", label: "Projets" },
-  { href: "/tasks", icon: "✅", label: "Tâches" },
-  { href: "/reminders", icon: "🔔", label: "Rappels" },
-  { href: "/petitbambou", icon: "🧘", label: "Petit Bambou" },
-  { href: "/shopping", icon: "🛒", label: "Shopping" },
-  { href: "/library", icon: "📚", label: "Bibliothèque" },
-  { href: "/habits", icon: "🎯", label: "Habitudes" },
-  { href: "/chess", icon: "♟️", label: "Chess" },
+type NavItem = { href: string; icon: string; label: string; active?: boolean };
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Général",
+    items: [
+      { href: "/", icon: "🏠", label: "Dashboard", active: true },
+    ],
+  },
+  {
+    label: "Productivité",
+    items: [
+      { href: "/pomodoro", icon: "⏱️", label: "Pomodoro" },
+      { href: "/projects", icon: "📁", label: "Projets" },
+      { href: "/tasks", icon: "✅", label: "Tâches" },
+      { href: "/reminders", icon: "🔔", label: "Rappels" },
+    ],
+  },
+  {
+    label: "Quotidien",
+    items: [
+      { href: "/habits", icon: "🎯", label: "Habitudes" },
+      { href: "/petitbambou", icon: "🧘", label: "Petit Bambou" },
+      { href: "/shopping", icon: "🛒", label: "Shopping" },
+    ],
+  },
+  {
+    label: "Loisirs",
+    items: [
+      { href: "/library", icon: "📚", label: "Bibliothèque" },
+      { href: "/chess", icon: "♟️", label: "Chess" },
+    ],
+  },
 ];
 
 export default async function DashboardPage() {
@@ -26,25 +48,52 @@ export default async function DashboardPage() {
       {/* ── Sidebar ── */}
       <aside style={sidebarStyle}>
         {/* Logo */}
-        <div style={logoStyle}>life×hub</div>
+        <div style={logoStyle}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 17, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.03em" }}>
+            life<span style={{ color: "var(--accent)" }}>×</span>hub
+          </span>
+        </div>
 
-        {/* Nav */}
-        <nav style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={item.active ? activeNavItemStyle : navItemStyle}
-            >
-              <span style={{ fontSize: 15, width: 22, textAlign: "center" }}>{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
+        {/* Nav groups */}
+        <nav style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              <div style={navGroupLabelStyle}>{group.label}</div>
+              {group.items.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`sidebar-nav-item${item.active ? " active" : ""}`}
+                >
+                  <span style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: item.active ? "rgba(59,126,248,0.15)" : "var(--surface2)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 14, flexShrink: 0,
+                    transition: "background 0.13s",
+                  }}>
+                    {item.icon}
+                  </span>
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
 
         {/* User section */}
         <div style={userSectionStyle}>
-          <div style={emailStyle} title={userEmail}>{userEmail}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: "50%",
+              background: "linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontSize: 11, fontWeight: 700, flexShrink: 0,
+            }}>
+              {userEmail[0]?.toUpperCase() ?? "?"}
+            </div>
+            <div style={emailStyle} title={userEmail}>{userEmail}</div>
+          </div>
           <form
             action={async () => {
               "use server";
@@ -74,7 +123,7 @@ const sidebarStyle: React.CSSProperties = {
   borderRight: "1px solid var(--border)",
   display: "flex",
   flexDirection: "column",
-  padding: "24px 0 20px",
+  padding: "20px 0 16px",
   position: "sticky",
   top: 0,
   height: "100vh",
@@ -82,43 +131,23 @@ const sidebarStyle: React.CSSProperties = {
 };
 
 const logoStyle: React.CSSProperties = {
-  fontFamily: "var(--font-mono)",
-  fontSize: 18,
-  fontWeight: 700,
-  color: "var(--text)",
-  letterSpacing: "-0.02em",
-  padding: "0 20px 20px",
+  padding: "0 16px 16px",
   borderBottom: "1px solid var(--border)",
-  marginBottom: 12,
+  marginBottom: 8,
 };
 
-const navItemStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  padding: "8px 20px",
-  fontSize: 13,
-  fontWeight: 400,
+const navGroupLabelStyle: React.CSSProperties = {
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
   color: "var(--text-muted)",
-  textDecoration: "none",
-  borderRight: "3px solid transparent",
-};
-
-const activeNavItemStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  padding: "8px 20px",
-  fontSize: 13,
-  fontWeight: 600,
-  color: "var(--accent)",
-  textDecoration: "none",
-  background: "rgba(59, 126, 248, 0.1)",
-  borderRight: "3px solid var(--accent)",
+  padding: "10px 16px 4px",
+  opacity: 0.7,
 };
 
 const userSectionStyle: React.CSSProperties = {
-  padding: "16px 20px 0",
+  padding: "12px 16px 0",
   borderTop: "1px solid var(--border)",
   display: "flex",
   flexDirection: "column",
@@ -132,6 +161,8 @@ const emailStyle: React.CSSProperties = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  flex: 1,
+  minWidth: 0,
 };
 
 const logoutBtnStyle: React.CSSProperties = {

@@ -208,6 +208,97 @@ a[href]:hover {
   50% { opacity: 0.35; }
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* ── Sidebar nav ── */
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: 8px;
+  margin: 0 8px;
+  transition: background 0.13s, color 0.13s;
+}
+
+.sidebar-nav-item:hover {
+  background: rgba(59, 126, 248, 0.07) !important;
+  color: var(--text) !important;
+  transform: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+.sidebar-nav-item.active {
+  background: rgba(59, 126, 248, 0.12);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Widget action button ── */
+
+.widget-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(59, 126, 248, 0.08);
+  border: 1px solid rgba(59, 126, 248, 0.2);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.widget-action-btn:hover {
+  background: rgba(59, 126, 248, 0.15) !important;
+  border-color: rgba(59, 126, 248, 0.4) !important;
+  transform: none !important;
+  box-shadow: none !important;
+  color: var(--accent) !important;
+}
+
+/* ── Module cards (dashboard quick-nav) ── */
+
+.module-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 10px 12px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  box-shadow: var(--shadow-sm);
+}
+
+.module-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: var(--shadow-md) !important;
+  border-color: var(--card-accent, var(--accent)) !important;
+}
+
 /* ── Scrollbar ── */
 
 ::-webkit-scrollbar {

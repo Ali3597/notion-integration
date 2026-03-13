@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { DBTask, DBProject } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
 import { ColFilterHeader } from "@/components/ColFilterHeader";
+import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { Spinner } from "@/components/Spinner";
 
 const STATUS_OPTIONS = ["Non commencé", "En cours", "Terminé"];
 
@@ -47,6 +49,7 @@ export default function TasksPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<DBTask>>({});
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -84,12 +87,14 @@ export default function TasksPage() {
     });
 
   async function handleToggleDone(t: DBTask) {
+    setTogglingId(t.id);
     const newStatus = t.status === "Terminé" ? "Non commencé" : "Terminé";
     await fetch(`/api/pomodoro/tasks?id=${t.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
+    setTogglingId(null);
     load();
   }
 
@@ -167,11 +172,12 @@ export default function TasksPage() {
             type="submit"
             disabled={saving || !newName.trim() || !newProjectId}
           >
-            {saving ? "Création..." : "Créer"}
+            {saving ? <><Spinner size={14} color="#fff" /> Création...</> : "Créer"}
           </button>
         </form>
       )}
 
+      {loading ? <TableSkeleton columns={6} rows={5} /> : (
       <div style={styles.tableWrapper}>
         <table style={styles.table}>
           <thead>
@@ -189,9 +195,7 @@ export default function TasksPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={6} style={styles.emptyCell}>Chargement...</td></tr>
-            ) : filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr><td colSpan={6} style={styles.emptyCell}>Aucune tâche</td></tr>
             ) : filtered.map((t) => {
               const done = t.status === "Terminé";
@@ -232,7 +236,13 @@ export default function TasksPage() {
               ) : (
                 <tr key={t.id} style={{ ...styles.tr, opacity: done ? 0.5 : 1 }}>
                   <td style={{ ...styles.td, paddingRight: 0 }}>
-                    <TaskCheckbox done={done} onChange={() => handleToggleDone(t)} />
+                    {togglingId === t.id ? (
+                      <div style={{ width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Spinner size={14} />
+                      </div>
+                    ) : (
+                      <TaskCheckbox done={done} onChange={() => handleToggleDone(t)} />
+                    )}
                   </td>
                   <td style={{ ...styles.td, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", paddingLeft: 0 }}>
                     {t.issue_number != null ? `#${t.issue_number}` : ""}
@@ -259,6 +269,7 @@ export default function TasksPage() {
           </tbody>
         </table>
       </div>
+      )}
     </main>
   );
 }

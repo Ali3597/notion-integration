@@ -36,6 +36,9 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
+import { KanbanSkeleton } from "@/components/skeletons/KanbanSkeleton";
+import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
+import { Spinner } from "@/components/Spinner";
 
 // ─────────────────────────── Constants ────────────────────────────────────
 
@@ -181,13 +184,14 @@ function TaskModal({
 // ─────────────────────────── Task Card ────────────────────────────────────
 
 function TaskCard({
-  task, projectMinutes, onEdit, onDelete, overlay = false,
+  task, projectMinutes, onEdit, onDelete, overlay = false, patching = false,
 }: {
   task: DBTask;
   projectMinutes: number | null;
   onEdit: (t: DBTask) => void;
   onDelete: (id: string) => void;
   overlay?: boolean;
+  patching?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const time = formatMinutes(projectMinutes);
@@ -215,7 +219,9 @@ function TaskCard({
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", lineHeight: 1 }}>
           {task.issue_number != null ? `#${task.issue_number}` : ""}
         </span>
-        {(hovered || overlay) && (
+        {patching ? (
+          <Spinner size={13} color="var(--accent)" />
+        ) : (hovered || overlay) && (
           <div style={{ display: "flex", gap: 4 }}>
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(task); }}
@@ -254,11 +260,12 @@ function TaskCard({
 
 // ─────────────────────────── Sortable Card ────────────────────────────────
 
-function SortableCard({ task, projectMinutes, onEdit, onDelete }: {
+function SortableCard({ task, projectMinutes, onEdit, onDelete, patching }: {
   task: DBTask;
   projectMinutes: number | null;
   onEdit: (t: DBTask) => void;
   onDelete: (id: string) => void;
+  patching?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
 
@@ -269,7 +276,7 @@ function SortableCard({ task, projectMinutes, onEdit, onDelete }: {
       {...attributes}
       {...listeners}
     >
-      <TaskCard task={task} projectMinutes={projectMinutes} onEdit={onEdit} onDelete={onDelete} />
+      <TaskCard task={task} projectMinutes={projectMinutes} onEdit={onEdit} onDelete={onDelete} patching={patching} />
     </div>
   );
 }
@@ -277,7 +284,7 @@ function SortableCard({ task, projectMinutes, onEdit, onDelete }: {
 // ─────────────────────────── Droppable Column ─────────────────────────────
 
 function KanbanColumn({
-  col, tasks, projectMinutes, onAddTask, onEditTask, onDeleteTask,
+  col, tasks, projectMinutes, onAddTask, onEditTask, onDeleteTask, patchingTaskId,
 }: {
   col: typeof KANBAN_COLUMNS[number];
   tasks: DBTask[];
@@ -285,6 +292,7 @@ function KanbanColumn({
   onAddTask: (status: string) => void;
   onEditTask: (t: DBTask) => void;
   onDeleteTask: (id: string) => void;
+  patchingTaskId: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
 
@@ -343,6 +351,7 @@ function KanbanColumn({
               projectMinutes={projectMinutes}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
+              patching={patchingTaskId === t.id}
             />
           ))}
         </SortableContext>
@@ -382,11 +391,7 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
       .catch(() => setLoading(false));
   }, [projectId, refreshKey]);
 
-  if (loading) return (
-    <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
-      Chargement des statistiques…
-    </div>
-  );
+  if (loading) return <StatsSkeleton kpiCount={4} />;
 
   if (!stats) return null;
 
@@ -562,6 +567,7 @@ export default function ProjectKanbanPage() {
   const [loading, setLoading] = useState(true);
   const [statsKey, setStatsKey] = useState(0);
   const [activeTask, setActiveTask] = useState<DBTask | null>(null);
+  const [patchingTaskId, setPatchingTaskId] = useState<string | null>(null);
   const dragFromColRef = useRef<string | null>(null);
 
   // Modal state
@@ -644,6 +650,7 @@ export default function ProjectKanbanPage() {
     }
 
     // Status changed — already moved optimistically in DragOver, now persist
+    setPatchingTaskId(active.id as string);
     try {
       await fetch(`/api/pomodoro/tasks?id=${active.id}`, {
         method: "PATCH",
@@ -652,6 +659,8 @@ export default function ProjectKanbanPage() {
       });
     } catch {
       load(); // Rollback on error
+    } finally {
+      setPatchingTaskId(null);
     }
   }
 
@@ -691,9 +700,10 @@ export default function ProjectKanbanPage() {
 
   if (loading) {
     return (
-      <main style={{ minHeight: "100vh", background: "var(--bg)", padding: "48px 40px" }}>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", padding: "48px 40px", display: "flex", flexDirection: "column", gap: 32 }}>
         <Link href="/projects" className="btn-back">← Projets</Link>
-        <div style={{ marginTop: 40, color: "var(--text-muted)", fontSize: 13 }}>Chargement...</div>
+        <KanbanSkeleton />
+        <StatsSkeleton kpiCount={4} />
       </main>
     );
   }
@@ -762,6 +772,7 @@ export default function ProjectKanbanPage() {
               onAddTask={openCreate}
               onEditTask={openEdit}
               onDeleteTask={handleDelete}
+              patchingTaskId={patchingTaskId}
             />
           ))}
         </div>

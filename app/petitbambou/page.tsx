@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import type { PBMetrics } from "@/types";
+import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
+import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 
 // ─────────────────────────── Types ────────────────────────────────────────
 
@@ -395,7 +397,7 @@ function TabApercu() {
       <div style={styles.card}>
         <div style={styles.sectionTitle}>Statistiques Petit Bambou (live)</div>
         {loadingStats ? (
-          <div style={styles.muted}>Chargement...</div>
+          <StatsSkeleton kpiCount={4} />
         ) : statsError ? (
           <div style={styles.error}>{statsError}</div>
         ) : pbMetrics ? (
@@ -476,7 +478,7 @@ function TabApercu() {
       <div style={styles.card}>
         <div style={styles.sectionTitle}>Dernières sessions (base locale)</div>
         {loadingStats ? (
-          <div style={styles.muted}>Chargement...</div>
+          <TableSkeleton columns={4} rows={5} />
         ) : recentSessions.length === 0 ? (
           <div style={styles.muted}>Aucune session synchronisée. Lance une sync pour commencer.</div>
         ) : (
@@ -572,7 +574,7 @@ function TabHistorique() {
       </div>
 
       {loading ? (
-        <div style={styles.muted}>Chargement...</div>
+        <TableSkeleton columns={5} rows={8} />
       ) : error ? (
         <div style={styles.error}>{error}</div>
       ) : filtered.length === 0 ? (
@@ -634,7 +636,7 @@ function TabStats() {
       });
   }, []);
 
-  if (loading) return <div style={{ ...styles.card, ...styles.muted }}>Chargement des statistiques...</div>;
+  if (loading) return <div style={styles.card}><StatsSkeleton kpiCount={3} /></div>;
   if (error) return <div style={{ ...styles.card, ...styles.error }}>{error}</div>;
   if (!analytics) return null;
 
@@ -777,7 +779,7 @@ function TabCalendrier() {
       {/* Calendar grid */}
       <div style={calStyles.card}>
         {loading ? (
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Chargement...</div>
+          <StatsSkeleton kpiCount={2} />
         ) : (
           <>
             {/* Day-of-week header */}

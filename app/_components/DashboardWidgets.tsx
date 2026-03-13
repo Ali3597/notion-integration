@@ -138,7 +138,7 @@ function Widget({
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {headerExtra}
           {action && (
-            <Link href={action.href} style={widgetActionStyle}>
+            <Link href={action.href} className="widget-action-btn">
               {action.label}
             </Link>
           )}
@@ -859,9 +859,3 @@ const widgetTitleStyle: React.CSSProperties = {
   color: "var(--text-muted)",
 };
 
-const widgetActionStyle: React.CSSProperties = {
-  fontSize: 11,
-  color: "var(--accent)",
-  textDecoration: "none",
-  fontWeight: 500,
-};

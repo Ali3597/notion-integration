@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { CustomSelect } from "@/components/CustomSelect";
 import { ColFilterHeader } from "@/components/ColFilterHeader";
+import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { Spinner } from "@/components/Spinner";
 
 // ─────────────────────────── Types ────────────────────────────────────────
 
@@ -231,9 +233,10 @@ interface CategoryTableProps {
   onEdit: (item: ShoppingItem) => void;
   onDelete: (id: string) => void;
   onNewItem: () => void;
+  togglingId?: string | null;
 }
 
-function CategoryTable({ items, onTogglePurchased, onEdit, onDelete, onNewItem }: CategoryTableProps) {
+function CategoryTable({ items, onTogglePurchased, onEdit, onDelete, onNewItem, togglingId }: CategoryTableProps) {
   return (
     <div style={styles.tableWrapper}>
       <table style={styles.table}>
@@ -260,8 +263,14 @@ function CategoryTable({ items, onTogglePurchased, onEdit, onDelete, onNewItem }
                   {formatPrice(item.estimated_price)}
                 </td>
                 <td style={{ ...styles.td, textAlign: "center" }}>
-                  <input type="checkbox" checked={item.purchased} onChange={() => onTogglePurchased(item)}
-                    style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--accent)" }} />
+                  {togglingId === item.id ? (
+                    <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16 }}>
+                      <Spinner size={14} />
+                    </div>
+                  ) : (
+                    <input type="checkbox" checked={item.purchased} onChange={() => onTogglePurchased(item)}
+                      style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--accent)" }} />
+                  )}
                 </td>
                 <td style={styles.td}>
                   {link ? <a href={link.href} target="_blank" rel="noopener noreferrer"
@@ -294,6 +303,7 @@ export default function ShoppingPage() {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>("general");
   const [purchasedFilter, setPurchasedFilter] = useState<PurchasedFilter>("");
@@ -355,12 +365,14 @@ export default function ShoppingPage() {
   }, [filteredItems]);
 
   async function handleTogglePurchased(item: ShoppingItem) {
+    setTogglingId(item.id);
     setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, purchased: !i.purchased } : i));
     await fetch(`/api/shopping/items?id=${item.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ purchased: !item.purchased }),
     });
+    setTogglingId(null);
     load();
   }
 
@@ -437,7 +449,7 @@ export default function ShoppingPage() {
       {/* Content */}
       <div style={styles.content}>
         {loading ? (
-          <div style={styles.muted}>Chargement...</div>
+          <TableSkeleton columns={6} rows={5} />
         ) : tab === "general" ? (
           /* General tab — inline table with column filter headers */
           <div style={styles.tableWrapper}>
@@ -475,8 +487,14 @@ export default function ShoppingPage() {
                         {formatPrice(item.estimated_price)}
                       </td>
                       <td style={{ ...styles.td, textAlign: "center" }}>
-                        <input type="checkbox" checked={item.purchased} onChange={() => handleTogglePurchased(item)}
-                          style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--accent)" }} />
+                        {togglingId === item.id ? (
+                          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16 }}>
+                            <Spinner size={14} />
+                          </div>
+                        ) : (
+                          <input type="checkbox" checked={item.purchased} onChange={() => handleTogglePurchased(item)}
+                            style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--accent)" }} />
+                        )}
                       </td>
                       <td style={styles.td}>
                         {link ? <a href={link.href} target="_blank" rel="noopener noreferrer"
@@ -527,6 +545,7 @@ export default function ShoppingPage() {
                       onEdit={openEdit}
                       onDelete={handleDelete}
                       onNewItem={openCreate}
+                      togglingId={togglingId}
                     />
                   )}
                 </div>

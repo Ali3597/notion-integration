@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { CustomSelect } from "@/components/CustomSelect";
 import {
@@ -10,6 +10,8 @@ import {
   Cell,
 } from "recharts";
 import type { DBHabit, DBHabitWithStats } from "@/types";
+import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
+import { Spinner } from "@/components/Spinner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ export default function HabitsPage() {
   const [tab, setTab] = useState<Tab>("today");
   const [habits, setHabits] = useState<DBHabitWithStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editHabit, setEditHabit] = useState<DBHabitWithStats | null>(null);
 
@@ -69,6 +72,7 @@ export default function HabitsPage() {
   useEffect(() => { fetchHabits(); }, [fetchHabits]);
 
   const handleToggle = async (habit: DBHabitWithStats) => {
+    setTogglingId(habit.id);
     const today = todayStr();
     if (habit.completed_today) {
       await fetch(`/api/habits/log?habit_id=${habit.id}&date=${today}`, { method: "DELETE" });
@@ -79,6 +83,7 @@ export default function HabitsPage() {
         body: JSON.stringify({ habit_id: habit.id, completed_date: today }),
       });
     }
+    setTogglingId(null);
     // Optimistic update
     setHabits((prev) =>
       prev.map((h) =>
@@ -178,13 +183,14 @@ export default function HabitsPage() {
 
       <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
         {loading ? (
-          <div style={{ color: "var(--text-muted)", padding: 40, textAlign: "center" }}>Chargement…</div>
+          <StatsSkeleton kpiCount={4} />
         ) : tab === "today" ? (
           <TodayTab
             habits={habits}
             todayHabits={todayHabits}
             doneCount={doneCount}
             onToggle={handleToggle}
+            togglingId={togglingId}
             onEdit={(h) => { setEditHabit(h); setShowForm(true); }}
             onArchive={handleArchive}
             onDelete={handleDelete}
@@ -210,7 +216,7 @@ export default function HabitsPage() {
 // ── Today Tab ─────────────────────────────────────────────────────────────────
 
 function TodayTab({
-  habits, todayHabits, doneCount, onToggle, onEdit, onArchive, onDelete,
+  habits, todayHabits, doneCount, onToggle, onEdit, onArchive, onDelete, togglingId,
 }: {
   habits: DBHabitWithStats[];
   todayHabits: DBHabitWithStats[];
@@ -219,6 +225,7 @@ function TodayTab({
   onEdit: (h: DBHabitWithStats) => void;
   onArchive: (id: string) => void;
   onDelete: (id: string) => void;
+  togglingId?: string | null;
 }) {
   const [showAll, setShowAll] = useState(false);
   const total = todayHabits.length;
@@ -279,6 +286,7 @@ function TodayTab({
               onEdit={() => onEdit(h)}
               onArchive={() => onArchive(h.id)}
               onDelete={() => onDelete(h.id)}
+              toggling={togglingId === h.id}
             />
           ))}
         </div>
@@ -307,6 +315,7 @@ function TodayTab({
                   onArchive={() => onArchive(h.id)}
                   onDelete={() => onDelete(h.id)}
                   dimmed
+                  toggling={togglingId === h.id}
                 />
               ))}
             </div>
@@ -320,7 +329,7 @@ function TodayTab({
 // ── Habit Row ─────────────────────────────────────────────────────────────────
 
 function HabitRow({
-  habit, onToggle, onEdit, onArchive, onDelete, dimmed,
+  habit, onToggle, onEdit, onArchive, onDelete, dimmed, toggling,
 }: {
   habit: DBHabitWithStats;
   onToggle: () => void;
@@ -328,6 +337,7 @@ function HabitRow({
   onArchive: () => void;
   onDelete: () => void;
   dimmed?: boolean;
+  toggling?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -345,7 +355,12 @@ function HabitRow({
         transition: "border-color 0.2s",
       }}
     >
-      {/* Checkbox */}
+      {/* Checkbox / Spinner */}
+      {toggling ? (
+        <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Spinner size={20} color={habit.color || "var(--accent)"} />
+        </div>
+      ) : (
       <button
         onClick={onToggle}
         style={{
@@ -368,6 +383,7 @@ function HabitRow({
           </svg>
         )}
       </button>
+      )}
 
       {/* Icon + Name */}
       <div style={{ flex: 1, minWidth: 0 }}>

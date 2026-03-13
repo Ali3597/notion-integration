@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { Spinner } from "@/components/Spinner";
 
 // ─────────────────────────── Types ────────────────────────────────────────
 
@@ -204,6 +206,7 @@ export default function RemindersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -240,12 +243,14 @@ export default function RemindersPage() {
   }
 
   async function handleToggle(r: Reminder) {
+    setTogglingId(r.id);
     setRemindersList((prev) => prev.map((item) => item.id === r.id ? { ...item, done: !item.done } : item));
     await fetch(`/api/reminders?id=${r.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done: !r.done }),
     });
+    setTogglingId(null);
     load();
   }
 
@@ -314,6 +319,7 @@ export default function RemindersPage() {
       </form>
 
       {/* Table */}
+      {loading ? <TableSkeleton columns={4} rows={5} /> : (
       <div style={styles.tableWrapper}>
         <table style={styles.table}>
           <thead>
@@ -325,9 +331,7 @@ export default function RemindersPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={4} style={styles.emptyCell}>Chargement...</td></tr>
-            ) : displayed.length === 0 ? (
+            {displayed.length === 0 ? (
               <tr><td colSpan={4} style={styles.emptyCell}>Aucun rappel</td></tr>
             ) : displayed.map((r) => {
               const overdue = isOverdue(r.due_date, r.done);
@@ -389,8 +393,14 @@ export default function RemindersPage() {
                         </div>
                       </td>
                       <td style={{ ...styles.td, textAlign: "center" }}>
-                        <input type="checkbox" checked={r.done} onChange={() => handleToggle(r)}
-                          style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--accent)" }} />
+                        {togglingId === r.id ? (
+                          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16 }}>
+                            <Spinner size={14} />
+                          </div>
+                        ) : (
+                          <input type="checkbox" checked={r.done} onChange={() => handleToggle(r)}
+                            style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--accent)" }} />
+                        )}
                       </td>
                       <td style={styles.td}>
                         <button style={styles.btnDelete} onClick={() => handleDelete(r.id, r.name)}>✕</button>
@@ -403,6 +413,7 @@ export default function RemindersPage() {
           </tbody>
         </table>
       </div>
+      )}
     </main>
   );
 }

@@ -8,6 +8,10 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   LineChart, Line, PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { CardGridSkeleton } from "@/components/skeletons/CardGridSkeleton";
+import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
+import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { ImageWithLoader } from "@/components/ImageWithLoader";
 
 // ─────────────────────────── Constants ────────────────────────────────────
 
@@ -555,7 +559,7 @@ function TabAuthors({ authors, books, onUpdate }: { authors: DBAuthor[]; books: 
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}>
               {a.photo_url ? (
-                <img src={a.photo_url} alt={a.name} style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover" }} />
+                <ImageWithLoader src={a.photo_url} alt={a.name} width={64} height={64} borderRadius="50%" placeholderIcon="👤" />
               ) : (
                 <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 20, fontWeight: 700 }}>{initials}</div>
               )}
@@ -580,7 +584,7 @@ function TabAuthors({ authors, books, onUpdate }: { authors: DBAuthor[]; books: 
               </div>
               <div style={{ padding: "20px 24px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-                  {selected.photo_url ? <img src={selected.photo_url} alt={selected.name} style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover" }} />
+                  {selected.photo_url ? <ImageWithLoader src={selected.photo_url} alt={selected.name} width={80} height={80} borderRadius="50%" placeholderIcon="👤" />
                     : <div style={{ width: 80, height: 80, borderRadius: "50%", background: "linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 24, fontWeight: 700 }}>{initials}</div>}
                   <div>
                     {editId === selected.id ? (
@@ -1354,7 +1358,9 @@ export default function LibraryPage() {
 
       {/* Content */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)" }}>Chargement...</div>
+        tab === "stats" ? <StatsSkeleton kpiCount={4} /> :
+        tab === "library" || tab === "authors" ? <CardGridSkeleton count={6} imageHeight={tab === "library" ? 112 : 80} columns={tab === "authors" ? "repeat(auto-fill, minmax(160px, 1fr))" : undefined} /> :
+        <TableSkeleton columns={5} rows={5} />
       ) : (
         <>
           {tab === "library" && <TabLibrary books={booksList} authors={authorsList} genres={genresList} seriesList={seriesList} onUpdate={loadAll} />}
