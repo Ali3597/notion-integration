@@ -43,6 +43,7 @@ export type DBTask = {
   priority: string | null;
   project_id?: string | null;
   project_name?: string | null;
+  issue_number?: number | null;
 };
 
 export type DBSession = {

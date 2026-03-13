@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { DBProject } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
 
@@ -311,10 +312,10 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
 }
 
 export default function ProjectsPage() {
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType] = useState("");
 
@@ -337,8 +338,6 @@ export default function ProjectsPage() {
   };
 
   useEffect(() => { load(); }, []);
-
-  const selected = projects.find(p => p.id === selectedId) ?? null;
 
   // Build display rows: root projects first, then their children when expanded
   const roots = projects.filter(p => p.parents.length === 0);
@@ -389,7 +388,6 @@ export default function ProjectsPage() {
   async function handleDelete(id: string) {
     if (!confirm("Supprimer ce projet ? Les tâches associées seront dissociées.")) return;
     await fetch(`/api/pomodoro/projects?id=${id}`, { method: "DELETE" });
-    if (selectedId === id) setSelectedId(null);
     load();
   }
 
@@ -442,9 +440,7 @@ export default function ProjectsPage() {
         </form>
       )}
 
-      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-          <div style={styles.tableWrapper}>
+      <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -468,7 +464,6 @@ export default function ProjectsPage() {
                 ) : filteredRows.length === 0 ? (
                   <tr><td colSpan={COL_COUNT} style={styles.emptyCell}>Aucun projet</td></tr>
                 ) : filteredRows.map(({ project: p, indent, parentId }) => {
-                  const isSelected = selectedId === p.id;
                   const hasChildren = p.children.length > 0;
                   const isExpanded = expanded.has(p.id);
                   const totalMin = Number(p.total_minutes ?? 0);
@@ -479,7 +474,7 @@ export default function ProjectsPage() {
                   return (
                     <tr
                       key={`${p.id}-${parentId ?? "root"}`}
-                      style={{ ...styles.tr, background: isSelected ? "rgba(59,126,248,0.04)" : undefined }}
+                      style={styles.tr}
                     >
                       <td style={{ ...styles.td, fontWeight: 500 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: indent ? 20 : 0 }}>
@@ -491,12 +486,9 @@ export default function ProjectsPage() {
                           ) : !indent ? (
                             <span style={{ width: 18, display: "inline-block" }} />
                           ) : null}
-                          <span
-                            onClick={() => setSelectedId(isSelected ? null : p.id)}
-                            style={styles.projectNameLink}
-                          >
+                          <Link href={`/projects/${p.id}`} style={styles.projectNameLink}>
                             {p.name}
-                          </span>
+                          </Link>
                         </div>
                       </td>
                       <td style={styles.td}>
@@ -537,7 +529,7 @@ export default function ProjectsPage() {
                         <div style={styles.actions}>
                           <button
                             style={styles.btnEdit}
-                            onClick={() => setSelectedId(isSelected ? null : p.id)}
+                            onClick={() => router.push(`/projects/${p.id}`)}
                           >✎</button>
                           <button style={styles.btnDelete} onClick={() => handleDelete(p.id)}>✕</button>
                         </div>
@@ -547,17 +539,6 @@ export default function ProjectsPage() {
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {selected && (
-          <DetailPanel
-            project={selected}
-            allProjects={projects}
-            onClose={() => setSelectedId(null)}
-            onUpdate={load}
-          />
-        )}
       </div>
     </main>
   );

@@ -235,6 +235,7 @@ export default function TasksPage() {
           <thead>
             <tr>
               <th style={{ ...styles.th, width: 32 }}></th>
+              <th style={{ ...styles.th, width: 40, fontFamily: "var(--font-mono)" }}>#</th>
               <th style={styles.th}>Tâche</th>
               <ColFilterHeader label="Statut"
                 options={[{ value: "", label: "Tous" }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s }))]}
@@ -250,14 +251,17 @@ export default function TasksPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={styles.emptyCell}>Chargement...</td></tr>
+              <tr><td colSpan={7} style={styles.emptyCell}>Chargement...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} style={styles.emptyCell}>Aucune tâche</td></tr>
+              <tr><td colSpan={7} style={styles.emptyCell}>Aucune tâche</td></tr>
             ) : filtered.map((t) => {
               const done = t.status === "Terminé";
               return editingId === t.id ? (
                 <tr key={t.id} style={styles.tr}>
                   <td style={styles.td}></td>
+                  <td style={{ ...styles.td, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
+                    {t.issue_number != null ? `#${t.issue_number}` : ""}
+                  </td>
                   <td style={styles.td}>
                     <input value={editValues.name ?? t.name}
                       onChange={(e) => setEditValues((v) => ({ ...v, name: e.target.value }))}
@@ -297,6 +301,9 @@ export default function TasksPage() {
                 <tr key={t.id} style={{ ...styles.tr, opacity: done ? 0.5 : 1 }}>
                   <td style={{ ...styles.td, paddingRight: 0 }}>
                     <TaskCheckbox done={done} onChange={() => handleToggleDone(t)} />
+                  </td>
+                  <td style={{ ...styles.td, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", paddingLeft: 0 }}>
+                    {t.issue_number != null ? `#${t.issue_number}` : ""}
                   </td>
                   <td style={{ ...styles.td, fontWeight: 500, textDecorationLine: done ? "line-through" : "none", color: done ? "var(--text-muted)" : "var(--text)" }}>
                     {t.name}

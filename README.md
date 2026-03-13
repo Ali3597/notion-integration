@@ -6,10 +6,11 @@ Plateforme de productivité locale. Centralise tes outils en un seul endroit ave
 
 | Module | Route | Description |
 |--------|-------|-------------|
-| Pomodoro | `/pomodoro` | Sessions de travail chronométrées liées aux projets et tâches |
+| Pomodoro | `/pomodoro` | Sessions de travail chronométrées liées directement aux projets |
 | Projets | `/projects` | Vue tableau de tous tes projets avec stats de sessions agrégées |
 | Tâches | `/tasks` | Toutes les tâches filtrables par statut, priorité et projet |
 | Rappels | `/reminders` | Rappels du quotidien avec date limite, badges En retard / Aujourd'hui |
+| Habitudes | `/habits` | Suivi quotidien des habitudes avec streaks, calendrier et statistiques |
 | Petit Bambou | `/petitbambou` | Sync des sessions de méditation depuis l'app PB, streaks, calendrier et stats |
 | Shopping | `/shopping` | Wishlist et liste de courses avec suivi du budget |
 | Chess.com | `/chess` | Suivi de progression, ouvertures et records depuis Chess.com |
@@ -45,9 +46,18 @@ Crée un fichier `.env.local` à la racine :
 # Base de données locale
 DATABASE_URL=postgresql://localhost:5432/lifehub
 
+# Auth (NextAuth.js v5 — Google OAuth)
+NEXTAUTH_SECRET=<openssl rand -base64 32>
+NEXTAUTH_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=<Google Cloud Console>
+GOOGLE_CLIENT_SECRET=<Google Cloud Console>
+
 # Petit Bambou (optionnel)
 PB_USER_UUID=<uuid utilisateur PB>
 PB_AUTH_TOKEN=<token JWT issu de l'app mobile PB>
+
+# iCloud Calendar (optionnel — widget dashboard)
+ICAL_URL=<URL ICS publique iCloud>
 
 # Chess.com / Notion (optionnel)
 NOTION_TOKEN=secret_...
@@ -58,12 +68,6 @@ NOTION_CHESS_OPENINGS_DB=<db_id>
 NOTION_CHESS_DAILY_DB=<db_id>
 NOTION_CHESS_PUZZLES_DB=<db_id>
 NOTION_CHESS_FORMATS_DB=<db_id>
-
-# Auth (NextAuth.js v5 — Google OAuth)
-NEXTAUTH_SECRET=<openssl rand -base64 32>
-NEXTAUTH_URL=http://localhost:3000
-GOOGLE_CLIENT_ID=<Google Cloud Console>
-GOOGLE_CLIENT_SECRET=<Google Cloud Console>
 ```
 
 ## Schéma de la base
@@ -72,7 +76,7 @@ GOOGLE_CLIENT_SECRET=<Google Cloud Console>
 |-------|---------------------|
 | `projects` | id, name, status, type |
 | `tasks` | id, name, status, priority, project_id |
-| `sessions` | id, name, task_id, start_time, end_time, notes |
+| `sessions` | id, name, project_id, start_time, end_time, notes |
 | `meditations` | id, lesson, date, duration_min, pb_uuid, streak |
 | `shopping_items` | id, name, category, estimated_price, purchased, store_link, notes |
 | `reminders` | id, name, due_date, done |
@@ -82,6 +86,8 @@ GOOGLE_CLIENT_SECRET=<Google Cloud Console>
 | `series` | id, name, author_id, status |
 | `books` | id, title, author_id, genre_id, serie_id, status, rating, image_url, started_at, finished_at |
 | `book_notes` | id, title, book_id, content |
+| `habits` | id, name, description, icon, color, frequency_type, frequency_days, target_per_period, active |
+| `habit_logs` | id, habit_id, completed_date, note |
 
 Pour modifier le schéma : éditer `lib/schema.ts` puis `npm run db:migrate`.
 

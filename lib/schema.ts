@@ -6,6 +6,7 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   status: text("status"),
   type: text("type"),
+  issue_counter: integer("issue_counter").default(0),
   created_at: timestamp("created_at").defaultNow(),
 });
 
@@ -15,6 +16,7 @@ export const tasks = pgTable("tasks", {
   status: text("status"),
   priority: text("priority"),
   project_id: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+  issue_number: integer("issue_number"),
   created_at: timestamp("created_at").defaultNow(),
 });
 

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { tasks, projects } from "@/lib/schema";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId");
+  const allParam = searchParams.get("all");
 
   try {
     const base = db
@@ -16,17 +17,19 @@ export async function GET(request: Request) {
         priority: tasks.priority,
         project_id: tasks.project_id,
         project_name: projects.name,
+        issue_number: tasks.issue_number,
       })
       .from(tasks)
-      .leftJoin(projects, eq(tasks.project_id, projects.id))
-      .orderBy(tasks.name);
+      .leftJoin(projects, eq(tasks.project_id, projects.id));
 
-    const allParam = searchParams.get("all");
-    const rows = projectId
-      ? allParam === "true"
-        ? await base.where(eq(tasks.project_id, projectId))
-        : await base.where(and(ne(tasks.status, "Terminé"), eq(tasks.project_id, projectId)))
-      : await base;
+    let rows;
+    if (projectId) {
+      rows = allParam === "true"
+        ? await base.where(eq(tasks.project_id, projectId)).orderBy(tasks.issue_number)
+        : await base.where(and(ne(tasks.status, "Terminé"), eq(tasks.project_id, projectId))).orderBy(tasks.issue_number);
+    } else {
+      rows = await base.orderBy(tasks.issue_number);
+    }
 
     return NextResponse.json(rows);
   } catch (error) {
@@ -39,7 +42,22 @@ export async function POST(request: Request) {
   try {
     const { name, status, priority, project_id } = await request.json();
     if (!name) return NextResponse.json({ error: "name requis" }, { status: 400 });
-    const [row] = await db.insert(tasks).values({ name, status, priority, project_id }).returning();
+
+    let issue_number: number | undefined;
+    if (project_id) {
+      // Atomically increment issue_counter and use as issue_number
+      const [updated] = await db
+        .update(projects)
+        .set({ issue_counter: sql`${projects.issue_counter} + 1` })
+        .where(eq(projects.id, project_id))
+        .returning({ issue_counter: projects.issue_counter });
+      issue_number = updated?.issue_counter ?? undefined;
+    }
+
+    const [row] = await db
+      .insert(tasks)
+      .values({ name, status, priority, project_id, issue_number })
+      .returning();
     return NextResponse.json(row);
   } catch (error) {
     console.error(error);
@@ -53,7 +71,9 @@ export async function PATCH(request: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
     const body = await request.json();
-    const [row] = await db.update(tasks).set(body).where(eq(tasks.id, id)).returning();
+    // Never allow issue_number to be modified
+    const { issue_number: _ignored, ...updateData } = body;
+    const [row] = await db.update(tasks).set(updateData).where(eq(tasks.id, id)).returning();
     return NextResponse.json(row);
   } catch (error) {
     console.error(error);
