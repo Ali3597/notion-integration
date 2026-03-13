@@ -14,7 +14,6 @@ export async function GET(request: Request) {
         id: tasks.id,
         name: tasks.name,
         status: tasks.status,
-        priority: tasks.priority,
         project_id: tasks.project_id,
         project_name: projects.name,
         issue_number: tasks.issue_number,
@@ -40,12 +39,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { name, status, priority, project_id } = await request.json();
+    const { name, status, project_id } = await request.json();
     if (!name) return NextResponse.json({ error: "name requis" }, { status: 400 });
 
     let issue_number: number | undefined;
     if (project_id) {
-      // Atomically increment issue_counter and use as issue_number
       const [updated] = await db
         .update(projects)
         .set({ issue_counter: sql`${projects.issue_counter} + 1` })
@@ -56,7 +54,7 @@ export async function POST(request: Request) {
 
     const [row] = await db
       .insert(tasks)
-      .values({ name, status, priority, project_id, issue_number })
+      .values({ name, status, project_id, issue_number })
       .returning();
     return NextResponse.json(row);
   } catch (error) {

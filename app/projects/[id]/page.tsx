@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -24,6 +24,18 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { CustomSelect } from "@/components/CustomSelect";
 import type { DBTask, DBProject } from "@/types";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  Cell,
+} from "recharts";
 
 // ─────────────────────────── Constants ────────────────────────────────────
 
@@ -39,24 +51,6 @@ const STATUS_OPTIONS = [
   { value: "Terminé",      label: "Terminé" },
 ];
 
-const PRIORITY_OPTIONS = [
-  { value: "High",   label: "High" },
-  { value: "Medium", label: "Medium" },
-  { value: "Low",    label: "Low" },
-];
-
-function priorityColor(p: string | null) {
-  if (p === "High")   return "var(--red)";
-  if (p === "Medium") return "#f97316";
-  return "var(--text-muted)";
-}
-
-function priorityBg(p: string | null) {
-  if (p === "High")   return "rgba(220,38,38,0.1)";
-  if (p === "Medium") return "rgba(249,115,22,0.1)";
-  return "rgba(136,136,170,0.1)";
-}
-
 function formatMinutes(min: number | null | undefined) {
   if (!min) return null;
   const h = Math.floor(min / 60);
@@ -64,6 +58,24 @@ function formatMinutes(min: number | null | undefined) {
   if (h === 0) return `${m}min`;
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
+
+function formatMonth(ym: string) {
+  const [y, m] = ym.split("-");
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+}
+
+// ─────────────────────────── Stats types ──────────────────────────────────
+
+type ProjectStats = {
+  completion: { total: number; done: number; in_progress: number; todo: number; pct: number };
+  totalMinutes: number;
+  sessionCount: number;
+  timeByWeek: { week: string; minutes: number }[];
+  tasksByWeek: { week: string; created: number; completed: number }[];
+  timeByDow: { day: string; minutes: number }[];
+  monthly: { month: string; sessions: number; minutes: number }[];
+};
 
 // ─────────────────────────── Task Modal ───────────────────────────────────
 
@@ -80,14 +92,12 @@ function TaskModal({
 }) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState("Non commencé");
-  const [priority, setPriority] = useState("Medium");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(task?.name ?? "");
       setStatus(task?.status ?? initialStatus ?? "Non commencé");
-      setPriority(task?.priority ?? "Medium");
     }
   }, [open, task, initialStatus]);
 
@@ -108,13 +118,13 @@ function TaskModal({
       await fetch(`/api/pomodoro/tasks?id=${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), status, priority }),
+        body: JSON.stringify({ name: name.trim(), status }),
       });
     } else {
       await fetch("/api/pomodoro/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), status, priority, project_id: projectId }),
+        body: JSON.stringify({ name: name.trim(), status, project_id: projectId }),
       });
     }
     setSaving(false);
@@ -152,15 +162,9 @@ function TaskModal({
               required
             />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={modalStyles.field}>
-              <label style={modalStyles.label}>Statut</label>
-              <CustomSelect value={status} onChange={setStatus} options={STATUS_OPTIONS} />
-            </div>
-            <div style={modalStyles.field}>
-              <label style={modalStyles.label}>Priorité</label>
-              <CustomSelect value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
-            </div>
+          <div style={modalStyles.field}>
+            <label style={modalStyles.label}>Statut</label>
+            <CustomSelect value={status} onChange={setStatus} options={STATUS_OPTIONS} />
           </div>
           <div style={modalStyles.footer}>
             <button type="button" onClick={onClose} style={modalStyles.btnCancel}>Annuler</button>
@@ -236,23 +240,14 @@ function TaskCard({
         {task.name}
       </div>
 
-      {/* Footer: priority + session time */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        {task.priority && (
-          <span style={{
-            fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5,
-            backgroundColor: priorityBg(task.priority),
-            color: priorityColor(task.priority),
-          }}>
-            {task.priority}
-          </span>
-        )}
-        {time && (
-          <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginLeft: "auto" }}>
+      {/* Footer: session time */}
+      {time && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
             ⏱ {time}
           </span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -295,16 +290,16 @@ function KanbanColumn({
 
   return (
     <div style={{
-      flex: 1,
       minWidth: 0,
       display: "flex",
       flexDirection: "column",
-      gap: 0,
+      overflow: "hidden",
     }}>
       {/* Column header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 8,
         padding: "12px 16px",
+        flexShrink: 0,
         borderRadius: "12px 12px 0 0",
         backgroundColor: col.bg,
         border: `1.5px solid ${col.border}`,
@@ -322,12 +317,13 @@ function KanbanColumn({
         </span>
       </div>
 
-      {/* Cards zone */}
+      {/* Cards zone — scrolls internally */}
       <div
         ref={setNodeRef}
         style={{
           flex: 1,
-          minHeight: 120,
+          minHeight: 0,
+          overflowY: "auto",
           padding: "10px 12px",
           borderRadius: "0 0 12px 12px",
           border: `1.5px solid ${col.border}`,
@@ -361,12 +357,179 @@ function KanbanColumn({
             display: "flex", alignItems: "center", gap: 4,
             borderRadius: 6, marginTop: 2,
             transition: "color 0.15s",
+            flexShrink: 0,
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = col.color; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)"; }}
         >
           + Ajouter une tâche
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────── Stats section ────────────────────────────────
+
+function StatsSection({ projectId }: { projectId: string }) {
+  const [stats, setStats] = useState<ProjectStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/pomodoro/projects/${projectId}/stats`)
+      .then((r) => r.json())
+      .then((d) => { setStats(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [projectId]);
+
+  if (loading) return (
+    <div style={{ padding: "32px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+      Chargement des statistiques…
+    </div>
+  );
+
+  if (!stats) return null;
+
+  const { completion, totalMinutes, sessionCount, timeByWeek, tasksByWeek, timeByDow, monthly } = stats;
+
+  const tooltipStyle = {
+    contentStyle: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 },
+    itemStyle: { color: "var(--text)" },
+    labelStyle: { color: "var(--text-muted)", fontSize: 11 },
+    cursor: { fill: "rgba(59,126,248,0.06)" },
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Section title */}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+        Statistiques
+      </div>
+
+      {/* KPI cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        {[
+          {
+            label: "Avancement",
+            value: `${completion.done} / ${completion.total}`,
+            sub: `${completion.pct}% terminé`,
+            accent: "var(--green)",
+            extra: (
+              <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden", marginTop: 6 }}>
+                <div style={{ height: "100%", width: `${completion.pct}%`, background: "var(--green)", borderRadius: 2, transition: "width 0.4s ease" }} />
+              </div>
+            ),
+          },
+          {
+            label: "Temps total",
+            value: formatMinutes(totalMinutes) ?? "—",
+            sub: `${sessionCount} session${sessionCount !== 1 ? "s" : ""}`,
+            accent: "var(--accent)",
+          },
+          {
+            label: "En cours",
+            value: String(completion.in_progress),
+            sub: "tâche" + (completion.in_progress !== 1 ? "s" : ""),
+            accent: "rgba(59,126,248,0.8)",
+          },
+          {
+            label: "À faire",
+            value: String(completion.todo),
+            sub: "tâche" + (completion.todo !== 1 ? "s" : "") + " restante" + (completion.todo !== 1 ? "s" : ""),
+            accent: "var(--text-muted)",
+          },
+        ].map((card) => (
+          <div key={card.label} style={kpiCard}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+              {card.label}
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: card.accent, lineHeight: 1.2, marginTop: 4 }}>
+              {card.value}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{card.sub}</div>
+            {card.extra}
+          </div>
+        ))}
+      </div>
+
+      {/* Charts grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+
+        {/* Temps / semaine */}
+        <div style={chartCard}>
+          <div style={chartTitle}>Temps / semaine (4 sem.)</div>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={timeByWeek} barSize={28}>
+              <XAxis dataKey="week" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+              <YAxis hide />
+              <Tooltip
+                formatter={(v: number) => [formatMinutes(v) ?? `${v}min`, "Temps"]}
+                {...tooltipStyle}
+              />
+              <Bar dataKey="minutes" radius={[4, 4, 0, 0]}>
+                {timeByWeek.map((_, i) => (
+                  <Cell key={i} fill={i === timeByWeek.length - 1 ? "var(--accent)" : "rgba(59,126,248,0.35)"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Tâches / semaine */}
+        <div style={chartCard}>
+          <div style={chartTitle}>Tâches / semaine (8 sem.)</div>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={tasksByWeek} barSize={14} barGap={2}>
+              <XAxis dataKey="week" tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+              <YAxis hide allowDecimals={false} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="created" name="Créées" fill="rgba(136,136,170,0.35)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="completed" name="Terminées" fill="rgba(22,163,74,0.6)" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Temps par jour de semaine */}
+        <div style={chartCard}>
+          <div style={chartTitle}>Par jour de semaine</div>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={timeByDow} barSize={24}>
+              <XAxis dataKey="day" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+              <YAxis hide />
+              <Tooltip
+                formatter={(v: number) => [formatMinutes(v) ?? `${v}min`, "Temps"]}
+                {...tooltipStyle}
+              />
+              <Bar dataKey="minutes" radius={[4, 4, 0, 0]} fill="rgba(59,126,248,0.45)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Activité mensuelle */}
+        <div style={chartCard}>
+          <div style={chartTitle}>Activité mensuelle</div>
+          {monthly.length === 0 ? (
+            <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>
+              Aucune donnée
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={monthly.map((r) => ({ ...r, month: formatMonth(r.month) }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v: number, name: string) =>
+                    name === "minutes" ? [formatMinutes(v) ?? `${v}min`, "Temps"] : [v, "Sessions"]
+                  }
+                  {...tooltipStyle}
+                />
+                <Line type="monotone" dataKey="minutes" name="minutes" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3, fill: "var(--accent)" }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
       </div>
     </div>
   );
@@ -398,6 +561,7 @@ export default function ProjectKanbanPage() {
   });
   const [loading, setLoading] = useState(true);
   const [activeTask, setActiveTask] = useState<DBTask | null>(null);
+  const dragFromColRef = useRef<string | null>(null);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -430,6 +594,7 @@ export default function ProjectKanbanPage() {
 
   function handleDragStart({ active }: DragStartEvent) {
     const colId = getColumnId(active.id as string, columns);
+    dragFromColRef.current = colId;
     if (!colId) return;
     const task = columns[colId].find((t) => t.id === active.id) ?? null;
     setActiveTask(task);
@@ -454,11 +619,14 @@ export default function ProjectKanbanPage() {
 
   async function handleDragEnd({ active, over }: DragEndEvent) {
     setActiveTask(null);
-    if (!over) return;
+    // Use the ref — columns state was already mutated by DragOver
+    const fromCol = dragFromColRef.current;
+    dragFromColRef.current = null;
 
-    const fromCol = getColumnId(active.id as string, columns);
+    if (!over || !fromCol) return;
+
     const toCol = getColumnId(over.id as string, columns);
-    if (!fromCol) return;
+    if (!toCol) return;
 
     // Same column reorder
     if (fromCol === toCol) {
@@ -474,18 +642,14 @@ export default function ProjectKanbanPage() {
     }
 
     // Status changed — already moved optimistically in DragOver, now persist
-    const task = columns[toCol!]?.find((t) => t.id === active.id);
-    if (task && toCol) {
-      try {
-        await fetch(`/api/pomodoro/tasks?id=${active.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: toCol }),
-        });
-      } catch {
-        // Rollback on error
-        load();
-      }
+    try {
+      await fetch(`/api/pomodoro/tasks?id=${active.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: toCol }),
+      });
+    } catch {
+      load(); // Rollback on error
     }
   }
 
@@ -509,7 +673,7 @@ export default function ProjectKanbanPage() {
     load();
   }
 
-  // ── Stats ──
+  // ── Header counters ──
 
   const allTasks = Object.values(columns).flat();
   const totalCount = allTasks.length;
@@ -578,7 +742,7 @@ export default function ProjectKanbanPage() {
         </button>
       </div>
 
-      {/* Kanban board */}
+      {/* Kanban board — 60vh with per-column internal scroll */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -586,7 +750,7 @@ export default function ProjectKanbanPage() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gridTemplateRows: "1fr", gap: 16, height: "60vh", overflow: "hidden" }}>
           {KANBAN_COLUMNS.map((col) => (
             <KanbanColumn
               key={col.id}
@@ -613,6 +777,9 @@ export default function ProjectKanbanPage() {
         </DragOverlay>
       </DndContext>
 
+      {/* Stats section */}
+      <StatsSection projectId={id} />
+
       {/* Task modal */}
       <TaskModal
         open={modalOpen}
@@ -637,6 +804,32 @@ const cardBtnStyle: React.CSSProperties = {
   borderRadius: 6,
   cursor: "pointer",
   lineHeight: 1,
+};
+
+const kpiCard: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1.5px solid var(--border)",
+  borderRadius: 12,
+  padding: "16px 18px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+};
+
+const chartCard: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1.5px solid var(--border)",
+  borderRadius: 12,
+  padding: "18px 20px 14px",
+};
+
+const chartTitle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: "0.07em",
+  textTransform: "uppercase",
+  color: "var(--text-muted)",
+  marginBottom: 12,
 };
 
 const modalStyles: Record<string, React.CSSProperties> = {

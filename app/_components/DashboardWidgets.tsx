@@ -7,7 +7,7 @@ import { usePomodoroContext, MODES } from "@/lib/pomodoro-context";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Reminder = { id: string; name: string; due_date: string | null; done: boolean };
-type PendingTask = { id: string; name: string; priority: string | null; total_minutes: number };
+type PendingTask = { id: string; name: string; total_minutes: number };
 type ProjectWithTasks = {
   id: string;
   name: string;
@@ -104,11 +104,6 @@ function getReminderBadge(due_date: string | null): { label: string; color: stri
   return { label: `Dans ${diff}j`, color: "var(--text-muted)" };
 }
 
-const PRIORITY_COLOR: Record<string, string> = {
-  High: "var(--red)",
-  Medium: "var(--accent2)",
-  Low: "var(--text-muted)",
-};
 
 // ── Widget wrapper ────────────────────────────────────────────────────────────
 
@@ -418,7 +413,7 @@ function ProjectsWidget({ projects }: { projects?: ProjectWithTasks[] }) {
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingLeft: 4 }}>
                     {project.pending_tasks.map((task) => (
                       <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ width: 4, height: 4, borderRadius: "50%", background: PRIORITY_COLOR[task.priority ?? "Low"] ?? "var(--text-muted)", flexShrink: 0 }} />
+                        <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: "var(--text)", flex: 1 }}>{task.name}</span>
                         {task.total_minutes > 0 && (
                           <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{task.total_minutes}min</span>

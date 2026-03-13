@@ -6,7 +6,6 @@ import type { DBTask, DBProject } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
 
 const STATUS_OPTIONS = ["Non commencé", "En cours", "Terminé"];
-const PRIORITY_OPTIONS = ["High", "Medium", "Low"];
 
 // ─────────────────────────── Column filter header ─────────────────────────
 
@@ -95,13 +94,11 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
 
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterPriority, setFilterPriority] = useState("");
   const [filterProject, setFilterProject] = useState("");
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newStatus, setNewStatus] = useState("Non commencé");
-  const [newPriority, setNewPriority] = useState("Medium");
   const [newProjectId, setNewProjectId] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -134,7 +131,6 @@ export default function TasksPage() {
   const filtered = tasks
     .filter((t) => {
       if (filterStatus && t.status !== filterStatus) return false;
-      if (filterPriority && t.priority !== filterPriority) return false;
       if (filterProject && t.project_id !== filterProject) return false;
       return true;
     })
@@ -161,7 +157,7 @@ export default function TasksPage() {
     await fetch("/api/pomodoro/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim(), status: newStatus, priority: newPriority, project_id: newProjectId || null }),
+      body: JSON.stringify({ name: newName.trim(), status: newStatus, project_id: newProjectId || null }),
     });
     setNewName("");
     setCreating(false);
@@ -185,8 +181,6 @@ export default function TasksPage() {
     load();
   }
 
-  const priorityIcon = (p: string | null) =>
-    p === "High" ? "🔴" : p === "Medium" ? "🟡" : "🟢";
 
   const projectOptions = [
     { value: "", label: "Tous les projets" },
@@ -213,11 +207,6 @@ export default function TasksPage() {
             options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
           />
           <CustomSelect
-            value={newPriority}
-            onChange={setNewPriority}
-            options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))}
-          />
-          <CustomSelect
             value={newProjectId}
             onChange={setNewProjectId}
             placeholder="— Projet —"
@@ -240,9 +229,6 @@ export default function TasksPage() {
               <ColFilterHeader label="Statut"
                 options={[{ value: "", label: "Tous" }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s }))]}
                 value={filterStatus} onChange={setFilterStatus} thStyle={styles.th} />
-              <ColFilterHeader label="Priorité"
-                options={[{ value: "", label: "Toutes" }, ...PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))]}
-                value={filterPriority} onChange={setFilterPriority} thStyle={styles.th} />
               <ColFilterHeader label="Projet"
                 options={projectOptions}
                 value={filterProject} onChange={setFilterProject} thStyle={styles.th} />
@@ -251,9 +237,9 @@ export default function TasksPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={styles.emptyCell}>Chargement...</td></tr>
+              <tr><td colSpan={6} style={styles.emptyCell}>Chargement...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} style={styles.emptyCell}>Aucune tâche</td></tr>
+              <tr><td colSpan={6} style={styles.emptyCell}>Aucune tâche</td></tr>
             ) : filtered.map((t) => {
               const done = t.status === "Terminé";
               return editingId === t.id ? (
@@ -272,13 +258,6 @@ export default function TasksPage() {
                       value={editValues.status ?? t.status ?? ""}
                       onChange={(v) => setEditValues((ev) => ({ ...ev, status: v }))}
                       options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
-                    />
-                  </td>
-                  <td style={styles.td}>
-                    <CustomSelect
-                      value={editValues.priority ?? t.priority ?? ""}
-                      onChange={(v) => setEditValues((ev) => ({ ...ev, priority: v }))}
-                      options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))}
                     />
                   </td>
                   <td style={styles.td}>
@@ -311,12 +290,11 @@ export default function TasksPage() {
                   <td style={styles.td}>
                     <span style={{ ...styles.badge, background: statusColor(t.status) }}>{t.status ?? "—"}</span>
                   </td>
-                  <td style={styles.td}>{priorityIcon(t.priority)} {t.priority ?? "—"}</td>
                   <td style={{ ...styles.td, color: "var(--text-muted)" }}>{t.project_name ?? "—"}</td>
                   <td style={styles.td}>
                     <div style={styles.actions}>
                       <button style={styles.btnEdit}
-                        onClick={() => { setEditingId(t.id); setEditValues({ name: t.name, status: t.status ?? "", priority: t.priority ?? "", project_id: t.project_id ?? "" }); }}>
+                        onClick={() => { setEditingId(t.id); setEditValues({ name: t.name, status: t.status ?? "", project_id: t.project_id ?? "" }); }}>
                         ✎
                       </button>
                       <button style={styles.btnDelete} onClick={() => handleDelete(t.id)}>✕</button>

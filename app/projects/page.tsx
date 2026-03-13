@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { DBProject } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
 
 // ─────────────────────────── Column filter header ─────────────────────────
 
@@ -147,6 +156,242 @@ function ParentMultiSelect({ value, onChange, projects, excludeIds }: {
     </div>
   );
 }
+
+// ─────────────────────────── Global stats ─────────────────────────────────
+
+type GlobalStats = {
+  kpis: {
+    total_projects: number;
+    active_projects: number;
+    total_tasks: number;
+    completed_tasks: number;
+    completion_pct: number;
+    total_minutes: number;
+    total_sessions: number;
+  };
+  byProject: { id: string; name: string; status: string | null; minutes: number; sessions: number }[];
+  heatmap: { date: string; count: number; minutes: number }[];
+  monthly: { month: string; sessions: number; minutes: number }[];
+};
+
+function fmtMin(min: number) {
+  if (!min || min === 0) return "—";
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (h === 0) return `${m}min`;
+  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+}
+
+function fmtMonthLabel(ym: string) {
+  const [y, m] = ym.split("-");
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+}
+
+function HeatmapCell({ minutes, date }: { minutes: number; date: string }) {
+  let bg = "var(--border)";
+  if (minutes > 0 && minutes < 30) bg = "rgba(59,126,248,0.2)";
+  else if (minutes >= 30 && minutes < 60) bg = "rgba(59,126,248,0.45)";
+  else if (minutes >= 60 && minutes < 120) bg = "rgba(59,126,248,0.7)";
+  else if (minutes >= 120) bg = "var(--accent)";
+  return (
+    <div
+      title={`${date}: ${fmtMin(minutes)}`}
+      style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: bg, flexShrink: 0, cursor: "default" }}
+    />
+  );
+}
+
+function GlobalStatsSection() {
+  const [stats, setStats] = useState<GlobalStats | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setError(null);
+    fetch("/api/pomodoro/projects/global-stats")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && d.kpis) {
+          setStats(d);
+        } else {
+          setError(d?.error ?? "Erreur de chargement");
+        }
+        setLoading(false);
+      })
+      .catch(() => { setError("Erreur réseau"); setLoading(false); });
+  }, [open]);
+
+  const tooltipStyle = {
+    contentStyle: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 },
+    itemStyle: { color: "var(--text)" },
+    labelStyle: { color: "var(--text-muted)", fontSize: 11 },
+    cursor: { fill: "rgba(59,126,248,0.06)" },
+  };
+
+  function localDateStr(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  // Build 90-day heatmap grid (13 weeks × 7 days)
+  function buildHeatmapGrid(heatmap: GlobalStats["heatmap"]) {
+    const map = new Map(heatmap.map((r) => [r.date, r.minutes]));
+    const today = new Date();
+    // start from 90 days ago, aligned to Monday
+    const start = new Date(today);
+    start.setDate(today.getDate() - 89);
+    const day0 = start.getDay(); // 0=Sun
+    const mondayPad = day0 === 0 ? 6 : day0 - 1;
+    start.setDate(start.getDate() - mondayPad);
+
+    const cells: { date: string; minutes: number; future: boolean }[] = [];
+    for (let i = 0; i < 13 * 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = localDateStr(d);
+      cells.push({ date: key, minutes: map.get(key) ?? 0, future: d > today });
+    }
+    // Split into weeks (columns)
+    const weeks: typeof cells[] = [];
+    for (let w = 0; w < 13; w++) weeks.push(cells.slice(w * 7, w * 7 + 7));
+    return weeks;
+  }
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 20px", background: "none", border: "none", cursor: "pointer",
+          fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+          color: "var(--text-muted)",
+        }}
+      >
+        <span>Vue d'ensemble</span>
+        <span style={{ fontSize: 9, opacity: 0.6 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 16, borderTop: "1px solid var(--border)" }}>
+          {loading ? (
+            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+              Chargement…
+            </div>
+          ) : error ? (
+            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--red)", fontSize: 12 }}>
+              {error}
+            </div>
+          ) : stats && stats.kpis ? (
+            <>
+              {/* KPI row */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, paddingTop: 16 }}>
+                {[
+                  { label: "Projets actifs", value: String(stats.kpis.active_projects), sub: `/ ${stats.kpis.total_projects} total` },
+                  { label: "Tâches", value: String(stats.kpis.total_tasks), sub: `${stats.kpis.completed_tasks} terminées` },
+                  { label: "Complétion", value: `${stats.kpis.completion_pct}%`, sub: "tâches terminées" },
+                  { label: "Temps total", value: fmtMin(stats.kpis.total_minutes), sub: `${stats.kpis.total_sessions} sessions` },
+                  { label: "Moy./session", value: stats.kpis.total_sessions > 0 ? fmtMin(Math.round(stats.kpis.total_minutes / stats.kpis.total_sessions)) : "—", sub: "par session" },
+                ].map((c) => (
+                  <div key={c.label} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>{c.label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: "var(--accent)", marginTop: 4, lineHeight: 1.2 }}>{c.value}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{c.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Charts row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+
+                {/* Top projets par temps */}
+                <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
+                    Temps par projet
+                  </div>
+                  {stats.byProject.filter((p) => p.minutes > 0).length === 0 ? (
+                    <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>Aucune session</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={140}>
+                      <BarChart
+                        layout="vertical"
+                        data={stats.byProject.filter((p) => p.minutes > 0).slice(0, 8).map((p) => ({ name: p.name.length > 18 ? p.name.slice(0, 17) + "…" : p.name, minutes: p.minutes }))}
+                        barSize={12}
+                        margin={{ left: 4, right: 8 }}
+                      >
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "var(--text)" }} axisLine={false} tickLine={false} width={110} />
+                        <Tooltip formatter={(v: number) => [fmtMin(v), "Temps"]} {...tooltipStyle} />
+                        <Bar dataKey="minutes" radius={[0, 4, 4, 0]}>
+                          {stats.byProject.filter((p) => p.minutes > 0).slice(0, 8).map((_, i) => (
+                            <Cell key={i} fill={i === 0 ? "var(--accent)" : `rgba(59,126,248,${0.6 - i * 0.06})`} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                {/* Activité mensuelle */}
+                <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
+                    Activité mensuelle
+                  </div>
+                  {stats.monthly.length === 0 ? (
+                    <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>Aucune session</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={140}>
+                      <BarChart data={stats.monthly.map((r) => ({ ...r, month: fmtMonthLabel(r.month) }))} barSize={20}>
+                        <XAxis dataKey="month" tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                        <YAxis hide />
+                        <Tooltip formatter={(v: number, name: string) => name === "minutes" ? [fmtMin(v), "Temps"] : [v, "Sessions"]} {...tooltipStyle} />
+                        <Bar dataKey="minutes" name="minutes" fill="rgba(59,126,248,0.5)" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
+
+              {/* Heatmap */}
+              <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
+                  Activité (90 jours)
+                </div>
+                <div style={{ display: "flex", gap: 3, overflowX: "auto" }}>
+                  {buildHeatmapGrid(stats.heatmap).map((week, wi) => (
+                    <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {week.map((cell, di) =>
+                        cell.future ? (
+                          <div key={di} style={{ width: 12, height: 12, flexShrink: 0 }} />
+                        ) : (
+                          <HeatmapCell key={di} date={cell.date} minutes={cell.minutes} />
+                        )
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 10, color: "var(--text-muted)" }}>
+                  <span>Moins</span>
+                  {["var(--border)", "rgba(59,126,248,0.2)", "rgba(59,126,248,0.45)", "rgba(59,126,248,0.7)", "var(--accent)"].map((bg, i) => (
+                    <div key={i} style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: bg }} />
+                  ))}
+                  <span>Plus</span>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────── Detail panel ──────────────────────────────────
 
 function DetailPanel({ project, allProjects, onClose, onUpdate }: {
   project: ProjectDetail;
@@ -439,6 +684,8 @@ export default function ProjectsPage() {
           </button>
         </form>
       )}
+
+      <GlobalStatsSection />
 
       <div style={styles.tableWrapper}>
             <table style={styles.table}>

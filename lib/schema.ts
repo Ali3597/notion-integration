@@ -14,7 +14,6 @@ export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   status: text("status"),
-  priority: text("priority"),
   project_id: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
   issue_number: integer("issue_number"),
   created_at: timestamp("created_at").defaultNow(),

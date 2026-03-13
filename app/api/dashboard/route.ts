@@ -132,7 +132,6 @@ export async function GET() {
               id: tasks.id,
               name: tasks.name,
               status: tasks.status,
-              priority: tasks.priority,
               project_id: tasks.project_id,
             })
             .from(tasks)
@@ -140,14 +139,11 @@ export async function GET() {
         : [];
 
     // Attach tasks to projects
-    const priorityOrder: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
     const projectsWithTasks = activeProjectsList.map((project) => {
       const projectTasks = allProjectTasks.filter((t) => t.project_id === project.id);
       const total = projectTasks.length;
       const completed = projectTasks.filter((t) => t.status === "Terminé").length;
-      const pending = projectTasks
-        .filter((t) => t.status === "À faire" || t.status === "En cours")
-        .sort((a, b) => (priorityOrder[a.priority ?? "Low"] ?? 2) - (priorityOrder[b.priority ?? "Low"] ?? 2));
+      const pending = projectTasks.filter((t) => t.status === "À faire" || t.status === "En cours");
 
       return {
         id: project.id,
@@ -157,7 +153,6 @@ export async function GET() {
         pending_tasks: pending.slice(0, 3).map((t) => ({
           id: t.id,
           name: t.name,
-          priority: t.priority,
         })),
         extra_task_count: Math.max(0, pending.length - 3),
       };
