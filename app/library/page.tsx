@@ -621,8 +621,12 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
   const [form, setForm] = useState({ title: "", author_id: "", genre_id: "", serie_id: "", status: "Pas Lu" as string, image_url: "", started_at: "", finished_at: "" });
   const [saving, setSaving] = useState(false);
   const [formDateError, setFormDateError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-  const filtered = books.filter((b) => b.status === subTab);
+  const q = search.toLowerCase();
+  const filtered = books.filter((b) => b.status === subTab && (
+    !q || b.title.toLowerCase().includes(q) || (b.author_name ?? "").toLowerCase().includes(q)
+  ));
   const formToday = new Date().toISOString().slice(0, 10);
   const formStartedDisabled = form.status === "Souhait" || form.status === "Pas Lu";
   const formFinishedDisabled = form.status === "Souhait" || form.status === "Pas Lu" || form.status === "En cours";
@@ -739,7 +743,7 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
           {BOOK_STATUSES.map((s) => {
             const count = books.filter((b) => b.status === s).length;
             return (
-              <button key={s} onClick={() => setSubTab(s)} style={{
+              <button key={s} onClick={() => { setSubTab(s); setSearch(""); }} style={{
                 padding: "6px 14px", borderRadius: 50, fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer",
                 background: subTab === s ? "var(--accent)" : "transparent",
                 color: subTab === s ? "#fff" : "var(--text-muted)",
@@ -749,10 +753,17 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
             );
           })}
         </div>
-        <button className="btn-primary" onClick={() => setAddOpen(true)}
-          style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>
-          + Ajouter un livre
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Titre, auteur…"
+              style={{ ...inputStyle, paddingLeft: 28, width: 180, fontSize: 12 }} />
+          </div>
+          <button className="btn-primary" onClick={() => setAddOpen(true)}
+            style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>
+            + Ajouter un livre
+          </button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -837,6 +848,7 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
                 {form.image_url ? <img src={form.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : "📚"}
               </div>
             </div>
+            {!form.image_url && form.title && <div style={{ marginTop: 6 }}><CoverSearchField title={form.title} onSelect={(url) => setForm(f => ({ ...f, image_url: url }))} /></div>}
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Début">
@@ -885,6 +897,11 @@ function TabAuthors({ authors, books, onUpdate }: { authors: DBAuthor[]; books: 
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState(""); const [editPhoto, setEditPhoto] = useState("");
   const [showEditPhotoSearch, setShowEditPhotoSearch] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredAuthors = search
+    ? authors.filter(a => a.name.toLowerCase().includes(search.toLowerCase()))
+    : authors;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -908,11 +925,16 @@ function TabAuthors({ authors, books, onUpdate }: { authors: DBAuthor[]; books: 
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
+        <div style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un auteur…"
+            style={{ ...inputStyle, paddingLeft: 28, width: 220, fontSize: 12 }} />
+        </div>
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>+ Ajouter un auteur</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 16 }}>
-        {authors.map((a) => {
+        {filteredAuthors.map((a) => {
           const initials = a.name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("");
           const bCount = books.filter((b) => b.author_id === a.id).length;
           return (
@@ -1025,6 +1047,9 @@ function TabGenres({ genres, books, onUpdate }: { genres: DBGenre[]; books: DBBo
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState(""); const [icon, setIcon] = useState(""); const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null); const [editName, setEditName] = useState(""); const [editIcon, setEditIcon] = useState("");
+  const [search, setSearch] = useState("");
+
+  const filteredGenres = search ? genres.filter(g => g.name.toLowerCase().includes(search.toLowerCase())) : genres;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -1045,11 +1070,16 @@ function TabGenres({ genres, books, onUpdate }: { genres: DBGenre[]; books: DBBo
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
+        <div style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un genre…"
+            style={{ ...inputStyle, paddingLeft: 28, width: 200, fontSize: 12 }} />
+        </div>
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>+ Ajouter un genre</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
-        {genres.map((g, i) => {
+        {filteredGenres.map((g, i) => {
           const bCount = books.filter((b) => b.genre_id === g.id).length;
           return (
             <div key={g.id} onClick={() => setSelected(g)}
@@ -1134,6 +1164,11 @@ function TabSeries({ seriesList, books, authors, onUpdate }: { seriesList: DBSer
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ name: "", author_id: "", status: "" });
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredSeries = search
+    ? seriesList.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.author_name ?? "").toLowerCase().includes(search.toLowerCase()))
+    : seriesList;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -1152,7 +1187,14 @@ function TabSeries({ seriesList, books, authors, onUpdate }: { seriesList: DBSer
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 12 }}>
+        <input
+          type="text"
+          placeholder="Rechercher une série ou un auteur…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ flex: 1, maxWidth: 320, padding: "7px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, background: "var(--surface)", color: "var(--text)", outline: "none" }}
+        />
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>+ Ajouter une série</button>
       </div>
       <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-md)" }}>
@@ -1167,9 +1209,9 @@ function TabSeries({ seriesList, books, authors, onUpdate }: { seriesList: DBSer
             </tr>
           </thead>
           <tbody>
-            {seriesList.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Aucune série</td></tr>
-            ) : seriesList.map((s) => {
+            {filteredSeries.length === 0 ? (
+              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>{search ? "Aucun résultat" : "Aucune série"}</td></tr>
+            ) : filteredSeries.map((s) => {
               const serieBooks = books.filter((b) => b.serie_id === s.id);
               return (
                 <tr key={s.id} className="clickable-row" style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
@@ -1271,8 +1313,16 @@ function TabNotes({ notes, books, onUpdate }: { notes: DBBookNote[]; books: DBBo
   const [form, setForm] = useState({ title: "", book_id: "", content: "" });
   const [saving, setSaving] = useState(false);
   const [filterBookId, setFilterBookId] = useState("");
+  const [searchText, setSearchText] = useState("");
 
-  const filtered = filterBookId ? notes.filter((n) => n.book_id === filterBookId) : notes;
+  const filtered = notes.filter((n) => {
+    if (filterBookId && n.book_id !== filterBookId) return false;
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      return n.title.toLowerCase().includes(q) || (n.content ?? "").toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -1299,14 +1349,23 @@ function TabNotes({ notes, books, onUpdate }: { notes: DBBookNote[]; books: DBBo
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
-        <CustomSelect
-          value={filterBookId}
-          onChange={setFilterBookId}
-          placeholder="Tous les livres"
-          searchable
-          style={{ width: "auto", minWidth: 180 }}
-          options={[{ value: "", label: "Tous les livres" }, ...books.map((b) => ({ value: b.id, label: b.title }))]}
-        />
+        <div style={{ display: "flex", gap: 8, flex: 1, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="Rechercher dans les notes…"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ flex: 1, minWidth: 160, maxWidth: 280, padding: "7px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, background: "var(--surface)", color: "var(--text)", outline: "none" }}
+          />
+          <CustomSelect
+            value={filterBookId}
+            onChange={setFilterBookId}
+            placeholder="Tous les livres"
+            searchable
+            style={{ width: "auto", minWidth: 180 }}
+            options={[{ value: "", label: "Tous les livres" }, ...books.map((b) => ({ value: b.id, label: b.title }))]}
+          />
+        </div>
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>+ Ajouter une note</button>
       </div>
       <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-md)" }}>
@@ -1321,7 +1380,7 @@ function TabNotes({ notes, books, onUpdate }: { notes: DBBookNote[]; books: DBBo
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={4} style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Aucune note</td></tr>
+              <tr><td colSpan={4} style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>{searchText || filterBookId ? "Aucun résultat" : "Aucune note"}</td></tr>
             ) : filtered.map((note) => (
               <tr key={note.id} className="clickable-row" style={{ borderBottom: "1px solid var(--border)", cursor: "pointer" }}
                 onClick={() => { setSelectedNote(note); setEditTitle(note.title); setEditContent(note.content ?? ""); }}

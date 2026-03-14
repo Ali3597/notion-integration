@@ -60,6 +60,7 @@ app/
   login/page.tsx                  # Login page (dark theme, Google sign-in)
   pomodoro/page.tsx               # Pomodoro timer + sessions table + today stats
   projects/page.tsx               # CRUD table — projects with session stats + column-header filters
+  projects/[id]/page.tsx          # Single project view — tasks, sessions, breadcrumb (Projets › Nom)
   tasks/page.tsx                  # CRUD table — tasks with column-header filters + session stats
   reminders/page.tsx              # Rappels du quotidien — ajout rapide, filtres, badges retard
   petitbambou/page.tsx            # 4 tabs: Aperçu | Historique | Calendrier | Statistiques
@@ -67,6 +68,7 @@ app/
   chess/page.tsx                  # Chess.com sync (still Notion-backed)
   library/page.tsx                # 5 tabs: Ma Bibliothèque | Auteurs | Genres | Séries | Notes
   habits/page.tsx                 # 3 tabs: Aujourd'hui (checklist+streaks) | Calendrier (par habitude) | Statistiques (Recharts: heatmap, bar, line, radar)
+  journal/page.tsx                # Journal entries + logs
   api/
     auth/[...nextauth]/route.ts   # NextAuth.js catch-all
     overview/route.ts             # GET — live dashboard stats (projects, tasks, today, meditation, shopping, reminders, library)
@@ -96,12 +98,17 @@ app/
       genres/route.ts             # GET/POST/PATCH/DELETE — genres with icon + book_count
       series/route.ts             # GET/POST/PATCH/DELETE — series with author_name + book_count
       notes/route.ts              # GET (optional ?book_id=) / POST/PATCH/DELETE — book notes
+      search/
+        books/route.ts            # GET ?q= — server-side proxy to openlibrary.org/search.json (no CORS)
+        authors/route.ts          # GET ?q= — server-side proxy to openlibrary.org/search/authors.json
     habits/route.ts               # GET (with stats: streak, completion_rate, completed_today) / POST / PATCH ?id= / DELETE ?id=
     habits/log/route.ts           # GET ?from=&to=&habit_id= / POST { habit_id, completed_date, note? } / DELETE ?habit_id=&date=
     habits/stats/route.ts         # GET ?id=&days= — heatmap, byDayOfWeek, byMonth, streakHistory for Recharts
     habits/overview/route.ts      # GET — 90-day grid for all active habits (dates[], grid{ habit_id: dates[] })
 auth.ts                           # NextAuth config: Google provider, email whitelist
 middleware.ts                     # Protects all routes except /login and /api/auth/*
+hooks/
+  useDynamicFavicon.ts            # Client hook — draws emoji on canvas → injects <link rel="icon"> data URL
 lib/
   db.ts                           # PostgreSQL pool + Drizzle instance
   schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs
@@ -172,8 +179,12 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - Inline `React.CSSProperties` for layout; `globals.css` handles hover/focus states.
 - **Column-header filters**: all data tables use inline `ColFilterHeader` / `ColSortHeader` components — clicking a column header opens a dropdown filter. No separate filter bar with `<select>`. Active filters shown with a blue dot indicator.
 - **Back button**: every module page includes `<Link href="/" className="btn-back">← Accueil</Link>` as the first child of `<main>`. Style defined in `globals.css`.
+- **Breadcrumb on sub-pages**: e.g. `/projects/[id]` shows "Projets › Nom du projet" instead of a back button — use `<Link>` for the parent + `<span>` for the current page.
 - **Cursor fix**: `* { cursor: default }` global reset requires explicit fixes — `a[href], a[href] * { cursor: pointer }`, `button * { cursor: inherit }`, `.clickable-row td { cursor: pointer }` are all defined in `globals.css`. Add `className="clickable-row"` to `<tr>` elements that should be fully clickable.
 - **Image loading**: external images (e.g. Open Library covers) use a gradient placeholder that fades out on `onLoad`. Use `-M.jpg` size suffix for Open Library URLs (good quality/size tradeoff).
+- **Dynamic browser tab title**: each module page sets `document.title = "Module — life×hub"` in a `useEffect`. No emoji in the title string — emoji goes in the favicon only.
+- **Dynamic favicon**: use `useDynamicFavicon(emoji)` from `hooks/useDynamicFavicon.ts` in each module page to set an emoji favicon via HTML Canvas. Do NOT put the emoji in `document.title` (would show twice in tab).
+- **URL tab persistence**: tab state in multi-tab pages (Library, PetitBambou, Habits, Shopping) is persisted in `?tab=` query param via `window.history.replaceState`. Initial state reads from `window.location.search` on mount. No Suspense wrapper needed.
 - Timer auto-saves only when a work interval completes naturally with a task selected. Resets/skips do not save.
 - Selects/dropdowns are disabled while the timer is running.
 - `@/` path alias maps to project root (`tsconfig.json`).
@@ -200,12 +211,23 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - 5 tabs: **Ma Bibliothèque** (grid cards by status sub-tab), **Auteurs** (grid with avatar), **Genres** (colored grid with icon), **Séries** (table), **Notes** (table).
 - Book statuses: `"En cours"`, `"Souhait"`, `"Pas Lu"`, `"Lu"`.
 - Serie statuses: `"En cours"`, `"Terminé"`, `"Abandonné"`.
+- `started_at` / `finished_at` are optional — even for "Lu" status. Show hint "Optionnel — laisse vide si tu ne te souviens plus des dates" in the form.
 - **BookCover component**: shows gradient placeholder with initials immediately, then fades in the real image on `onLoad` (smooth UX even on slow external loads).
-- **Image URLs**: use Open Library CDN — books: `https://covers.openlibrary.org/b/id/{id}-M.jpg`, authors: `https://covers.openlibrary.org/a/id/{id}-M.jpg`. Use `-M.jpg` (not `-L.jpg`) for faster loading.
+- **Image URLs**: use Open Library CDN — books: `https://covers.openlibrary.org/b/id/{id}-M.jpg`, authors: `https://covers.openlibrary.org/a/olid/{olid}-M.jpg`. Use `-M.jpg` (not `-L.jpg`) for faster loading.
 - **Genre icons**: stored in the `icon` column of the `genres` table (emoji string). Current icons: 🌱 Développement Personnel, 📝 Essai, ⚔️ Fantaisie, 🖊️ Poésie, 📖 Roman, 🚀 Science Fiction.
 - `book_notes` cascade-deletes when the parent book is deleted.
 - The `BookDrawer` component handles inline note creation/editing/deletion directly without a separate page.
 - Overview stat: `library: { reading, read }` — count of books with status `"En cours"` and `"Lu"`.
+- **Open Library enrichment** — all calls are server-side (no CORS):
+  - `BookSearchField`: debounced text input in the add-book modal → calls `/api/library/search/books` → dropdown with cover thumbnails → on select, auto-fills title/cover/author/genre, auto-creates missing author with fire-and-forget photo enrichment
+  - `CoverSearchField`: "Chercher la couverture" button → triggers book search → shows cover grid to pick from — present in both the creation modal and the book drawer when no cover is set
+  - `AuthorPhotoSearch`: "Chercher une photo" button in author add modal and edit drawer → calls `/api/library/search/authors` → shows circular photo options
+- **Search bars in every tab** — all client-side filtering (no API re-fetch):
+  - Ma Bibliothèque: filter by title or author name
+  - Auteurs: filter by name
+  - Genres: filter by name
+  - Séries: filter by series name or author name
+  - Notes: text filter by note title or content + book dropdown filter
 
 ## Habitudes Module — Specific Notes
 

@@ -14,7 +14,8 @@ Plateforme de productivité locale. Centralise tes outils en un seul endroit ave
 | Petit Bambou | `/petitbambou` | Sync des sessions de méditation depuis l'app PB, streaks, calendrier et stats |
 | Shopping | `/shopping` | Wishlist et liste de courses avec suivi du budget |
 | Chess.com | `/chess` | Suivi de progression, ouvertures et records depuis Chess.com |
-| Bibliothèque | `/library` | Livres, auteurs, séries, genres et notes de lecture |
+| Bibliothèque | `/library` | Livres, auteurs, séries, genres et notes de lecture — enrichissement Open Library |
+| Journal | `/journal` | Entrées de journal et logs |
 
 ## Stack
 
@@ -106,10 +107,14 @@ bash scripts/setup.sh  # Premier lancement : crée la DB + pousse le schéma
 - Styles via CSS custom properties de `globals.css` uniquement (`--bg`, `--surface`, `--accent`, etc.)
 - Inline `React.CSSProperties` pour le layout — pas de librairie UI
 - Filtres directement dans les en-têtes de colonnes des tableaux (clic sur colonne = dropdown inline)
-- Bouton `← Accueil` (`className="btn-back"`) présent sur chaque module
+- Bouton `← Accueil` (`className="btn-back"`) présent sur chaque module ; breadcrumb (ex. "Projets › Nom") sur les sous-pages
 - Hover des boutons principaux défini dans `globals.css` (`.btn-primary`, `.btn-back`)
 - `button * { cursor: inherit }` dans `globals.css` pour que les enfants de boutons héritent du cursor
 - `.clickable-row td { cursor: pointer }` pour les lignes de tableau cliquables
+- **Favicon dynamique par module** : hook `useDynamicFavicon(emoji)` dans `hooks/useDynamicFavicon.ts` — dessine l'emoji sur un canvas 32×32 et injecte l'URL en `<link rel="icon">`
+- **Titre de l'onglet** : chaque page définit `document.title = "Module — life×hub"` via `useEffect` — sans emoji (déjà dans le favicon)
+- **Persistance de l'onglet actif** : `?tab=` dans l'URL via `window.history.replaceState`, état initial lu depuis `window.location.search` — concerne Library, PetitBambou, Habits, Shopping
+- **Bibliothèque — enrichissement Open Library** : routes serveur `/api/library/search/books` et `/api/library/search/authors` (proxy sans CORS). `BookSearchField` : saisie déboncée → dropdown avec couvertures → auto-remplit titre/couverture/auteur/genre. `CoverSearchField` : recherche de couverture de remplacement. `AuthorPhotoSearch` : recherche de photo auteur. Barre de recherche dans chaque onglet (filtrage client-side).
 
 ## Ajouter un nouveau module
 
