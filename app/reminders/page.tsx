@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { Spinner } from "@/components/Spinner";
+import { DatePicker } from "@/components/DatePicker";
 
 // ─────────────────────────── Types ────────────────────────────────────────
 
@@ -302,11 +303,11 @@ export default function RemindersPage() {
           onChange={(e) => setNewName(e.target.value)}
           style={styles.addInput}
         />
-        <input
-          type="date"
-          value={newDueDate}
-          onChange={(e) => setNewDueDate(e.target.value)}
-          style={styles.addDate}
+        <DatePicker
+          value={newDueDate || null}
+          onChange={(v) => setNewDueDate(v ?? "")}
+          placeholder="Date limite"
+          style={{ minWidth: 160 }}
         />
         <button
           type="submit"
@@ -355,9 +356,12 @@ export default function RemindersPage() {
                           }} />
                       </td>
                       <td style={styles.td}>
-                        <input type="date" value={editDueDate}
-                          onChange={(e) => setEditDueDate(e.target.value)}
-                          style={{ ...styles.inlineInput, width: 160 }} />
+                        <DatePicker
+                          value={editDueDate || null}
+                          onChange={(v) => setEditDueDate(v ?? "")}
+                          placeholder="Date limite"
+                          style={{ minWidth: 160 }}
+                        />
                       </td>
                       <td style={styles.td}></td>
                       <td style={styles.td}>

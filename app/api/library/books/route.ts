@@ -55,16 +55,21 @@ export async function POST(request: Request) {
     const { title, author_id, genre_id, serie_id, status, rating, image_url, started_at, finished_at } = body;
     if (!title?.trim()) return NextResponse.json({ error: "Le titre est requis" }, { status: 400 });
 
+    const effectiveStatus: string = status || "Pas Lu";
+    if (effectiveStatus === "En cours" && !started_at) {
+      return NextResponse.json({ error: "La date de début est requise pour un livre en cours" }, { status: 400 });
+    }
+
     const [book] = await db.insert(books).values({
       title: title.trim(),
       author_id: author_id || null,
       genre_id: genre_id || null,
       serie_id: serie_id || null,
-      status: status || "Pas Lu",
+      status: effectiveStatus,
       rating: rating ?? null,
       image_url: image_url || null,
-      started_at: started_at || null,
-      finished_at: finished_at || null,
+      started_at: (effectiveStatus === "Souhait" || effectiveStatus === "Pas Lu") ? null : (started_at || null),
+      finished_at: (effectiveStatus === "Souhait" || effectiveStatus === "Pas Lu" || effectiveStatus === "En cours") ? null : (finished_at || null),
     }).returning();
 
     return NextResponse.json(book, { status: 201 });
@@ -92,6 +97,14 @@ export async function PATCH(request: Request) {
     if (body.image_url !== undefined) updates.image_url = body.image_url || null;
     if (body.started_at !== undefined) updates.started_at = body.started_at || null;
     if (body.finished_at !== undefined) updates.finished_at = body.finished_at || null;
+
+    // Server-side status/date enforcement
+    if (updates.status === "Souhait" || updates.status === "Pas Lu") {
+      updates.started_at = null;
+      updates.finished_at = null;
+    } else if (updates.status === "En cours") {
+      updates.finished_at = null;
+    }
 
     const [updated] = await db.update(books).set(updates).where(eq(books.id, id)).returning();
     if (!updated) return NextResponse.json({ error: "Livre non trouvé" }, { status: 404 });

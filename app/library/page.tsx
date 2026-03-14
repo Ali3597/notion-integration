@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { DBBook, DBAuthor, DBGenre, DBSerie, DBBookNote } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
+import { DatePicker } from "@/components/DatePicker";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   LineChart, Line, PieChart, Pie, Cell, Legend,
@@ -165,9 +166,9 @@ const selectStyle: React.CSSProperties = {
 
 // ─────────────────────────── Book Drawer ──────────────────────────────────
 
-function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
+function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate, onRefresh }: {
   book: DBBook; authors: DBAuthor[]; genres: DBGenre[]; seriesList: DBSerie[];
-  onClose: () => void; onUpdate: () => void;
+  onClose: () => void; onUpdate: () => void; onRefresh: () => void;
 }) {
   const [title, setTitle] = useState(book.title);
   const [authorId, setAuthorId] = useState(book.author_id ?? "");
@@ -179,6 +180,43 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
   const [startedAt, setStartedAt] = useState(book.started_at ?? "");
   const [finishedAt, setFinishedAt] = useState(book.finished_at ?? "");
   const [saving, setSaving] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  const drawerToday = new Date().toISOString().slice(0, 10);
+  const startedDisabled = status === "Souhait" || status === "Pas Lu";
+  const finishedDisabled = status === "Souhait" || status === "Pas Lu" || status === "En cours";
+
+  function handleStatusChange(newStatus: string) {
+    setStatus(newStatus);
+    setDateError(null);
+    if (newStatus === "Souhait" || newStatus === "Pas Lu") {
+      setStartedAt("");
+      setFinishedAt("");
+    } else if (newStatus === "En cours") {
+      setFinishedAt("");
+      if (!startedAt) setStartedAt(drawerToday);
+    }
+  }
+
+  async function handleCreateAuthor(label: string) {
+    const res = await fetch("/api/library/authors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label.trim(), photo_url: null }),
+    });
+    const data = await res.json();
+    if (data.id) { setAuthorId(data.id); onRefresh(); }
+  }
+
+  async function handleCreateGenre(label: string) {
+    const res = await fetch("/api/library/genres", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label.trim(), icon: "📚" }),
+    });
+    const data = await res.json();
+    if (data.id) { setGenreId(data.id); onRefresh(); }
+  }
 
   const [notes, setNotes] = useState<DBBookNote[]>([]);
   const [newNoteTitle, setNewNoteTitle] = useState("");
@@ -196,6 +234,15 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
   useEffect(() => { loadNotes(); }, [loadNotes]);
 
   async function handleSave() {
+    setDateError(null);
+    if (status === "En cours" && !startedAt) {
+      setDateError("La date de début est requise pour un livre en cours");
+      return;
+    }
+    if (startedAt && finishedAt && finishedAt < startedAt) {
+      setDateError("La date de fin ne peut pas être avant la date de début");
+      return;
+    }
     setSaving(true);
     await fetch(`/api/library/books?id=${book.id}`, {
       method: "PATCH",
@@ -262,6 +309,7 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
             onChange={setAuthorId}
             placeholder="— Aucun —"
             searchable
+            onCreateOption={handleCreateAuthor}
             options={[{ value: "", label: "— Aucun —" }, ...authors.map((a) => ({ value: a.id, label: a.name }))]}
           />
         </Field>
@@ -270,6 +318,8 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
             value={genreId}
             onChange={setGenreId}
             placeholder="— Aucun —"
+            searchable
+            onCreateOption={handleCreateGenre}
             options={[{ value: "", label: "— Aucun —" }, ...genres.map((g) => ({ value: g.id, label: g.name }))]}
           />
         </Field>
@@ -284,7 +334,7 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
         <Field label="Statut">
           <CustomSelect
             value={status}
-            onChange={setStatus}
+            onChange={handleStatusChange}
             options={BOOK_STATUSES.map((s) => ({ value: s, label: s }))}
           />
         </Field>
@@ -293,19 +343,39 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate }: {
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Début">
-            <input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} style={inputStyle} />
+            <DatePicker
+              value={startedAt || null}
+              onChange={(v) => { setStartedAt(v ?? ""); setDateError(null); }}
+              disabled={startedDisabled}
+              clearable={!startedDisabled}
+              maxDate={finishedAt || null}
+              placeholder="Choisir une date"
+            />
+            {startedDisabled && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Non applicable pour ce statut</span>}
+            {status === "Lu" && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Optionnel — laisse vide si tu ne te souviens plus des dates</span>}
           </Field>
           <Field label="Fin">
-            <input type="date" value={finishedAt} onChange={(e) => setFinishedAt(e.target.value)} style={inputStyle} />
+            <DatePicker
+              value={finishedAt || null}
+              onChange={(v) => { setFinishedAt(v ?? ""); setDateError(null); }}
+              disabled={finishedDisabled}
+              clearable={!finishedDisabled}
+              minDate={startedAt || null}
+              placeholder="Choisir une date"
+            />
+            {status === "En cours" && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Disponible une fois le livre terminé</span>}
+            {(status === "Souhait" || status === "Pas Lu") && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Non applicable pour ce statut</span>}
+            {status === "Lu" && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Optionnel — laisse vide si tu ne te souviens plus des dates</span>}
           </Field>
         </div>
+        {dateError && <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 4 }}>{dateError}</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
           <button className="btn-primary" onClick={handleSave} disabled={saving}
             style={{ flex: 1, padding: "9px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", cursor: "pointer", border: "none", opacity: saving ? 0.6 : 1 }}>
             {saving ? "Enregistrement..." : "Enregistrer"}
           </button>
           {status !== "Lu" && (
-            <button onClick={() => { setStatus("Lu"); setFinishedAt(new Date().toISOString().slice(0, 10)); }}
+            <button onClick={() => handleStatusChange("Lu")}
               style={{ padding: "9px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, background: "rgba(22,163,74,0.1)", color: "var(--green)", cursor: "pointer", border: "1.5px solid rgba(22,163,74,0.3)", whiteSpace: "nowrap" }}>
               ✓ Marquer Lu
             </button>
@@ -381,12 +451,56 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ title: "", author_id: "", genre_id: "", serie_id: "", status: "Pas Lu" as string, image_url: "", started_at: "", finished_at: "" });
   const [saving, setSaving] = useState(false);
+  const [formDateError, setFormDateError] = useState<string | null>(null);
 
   const filtered = books.filter((b) => b.status === subTab);
+  const formToday = new Date().toISOString().slice(0, 10);
+  const formStartedDisabled = form.status === "Souhait" || form.status === "Pas Lu";
+  const formFinishedDisabled = form.status === "Souhait" || form.status === "Pas Lu" || form.status === "En cours";
+
+  function handleFormStatusChange(newStatus: string) {
+    setFormDateError(null);
+    if (newStatus === "Souhait" || newStatus === "Pas Lu") {
+      setForm(f => ({ ...f, status: newStatus, started_at: "", finished_at: "" }));
+    } else if (newStatus === "En cours") {
+      setForm(f => ({ ...f, status: newStatus, finished_at: "", started_at: f.started_at || formToday }));
+    } else if (newStatus === "Lu") {
+      setForm(f => ({ ...f, status: newStatus }));
+    }
+  }
+
+  async function handleCreateAuthorInForm(label: string) {
+    const res = await fetch("/api/library/authors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label.trim(), photo_url: null }),
+    });
+    const data = await res.json();
+    if (data.id) { setForm(f => ({ ...f, author_id: data.id })); onUpdate(); }
+  }
+
+  async function handleCreateGenreInForm(label: string) {
+    const res = await fetch("/api/library/genres", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label.trim(), icon: "📚" }),
+    });
+    const data = await res.json();
+    if (data.id) { setForm(f => ({ ...f, genre_id: data.id })); onUpdate(); }
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
+    setFormDateError(null);
+    if (form.status === "En cours" && !form.started_at) {
+      setFormDateError("La date de début est requise pour un livre en cours");
+      return;
+    }
+    if (form.started_at && form.finished_at && form.finished_at < form.started_at) {
+      setFormDateError("La date de fin ne peut pas être avant la date de début");
+      return;
+    }
     setSaving(true);
     await fetch("/api/library/books", {
       method: "POST",
@@ -455,6 +569,7 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
           <BookDrawer
             book={selectedBook} authors={authors} genres={genres} seriesList={seriesList}
             onClose={() => setSelectedBook(null)}
+            onRefresh={onUpdate}
             onUpdate={() => { onUpdate(); setSelectedBook(null); }}
           />
         )}
@@ -472,6 +587,7 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
               onChange={(v) => setForm((f) => ({ ...f, author_id: v }))}
               placeholder="— Aucun —"
               searchable
+              onCreateOption={handleCreateAuthorInForm}
               options={[{ value: "", label: "— Aucun —" }, ...authors.map((a) => ({ value: a.id, label: a.name }))]}
             />
           </Field>
@@ -480,6 +596,8 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
               value={form.genre_id}
               onChange={(v) => setForm((f) => ({ ...f, genre_id: v }))}
               placeholder="— Aucun —"
+              searchable
+              onCreateOption={handleCreateGenreInForm}
               options={[{ value: "", label: "— Aucun —" }, ...genres.map((g) => ({ value: g.id, label: g.name }))]}
             />
           </Field>
@@ -494,7 +612,7 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
           <Field label="Statut">
             <CustomSelect
               value={form.status}
-              onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+              onChange={handleFormStatusChange}
               options={BOOK_STATUSES.map((s) => ({ value: s, label: s }))}
             />
           </Field>
@@ -502,9 +620,33 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
             <input value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} style={inputStyle} placeholder="https://..." />
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Début"><input type="date" value={form.started_at} onChange={(e) => setForm((f) => ({ ...f, started_at: e.target.value }))} style={inputStyle} /></Field>
-            <Field label="Fin"><input type="date" value={form.finished_at} onChange={(e) => setForm((f) => ({ ...f, finished_at: e.target.value }))} style={inputStyle} /></Field>
+            <Field label="Début">
+              <DatePicker
+                value={form.started_at || null}
+                onChange={(v) => { setForm(f => ({ ...f, started_at: v ?? "" })); setFormDateError(null); }}
+                disabled={formStartedDisabled}
+                clearable={!formStartedDisabled}
+                maxDate={form.finished_at || null}
+                placeholder="Choisir une date"
+              />
+              {formStartedDisabled && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Non applicable pour ce statut</span>}
+              {form.status === "Lu" && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Optionnel — laisse vide si tu ne te souviens plus des dates</span>}
+            </Field>
+            <Field label="Fin">
+              <DatePicker
+                value={form.finished_at || null}
+                onChange={(v) => { setForm(f => ({ ...f, finished_at: v ?? "" })); setFormDateError(null); }}
+                disabled={formFinishedDisabled}
+                clearable={!formFinishedDisabled}
+                minDate={form.started_at || null}
+                placeholder="Choisir une date"
+              />
+              {form.status === "En cours" && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Disponible une fois le livre terminé</span>}
+              {formStartedDisabled && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Non applicable pour ce statut</span>}
+              {form.status === "Lu" && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Optionnel — laisse vide si tu ne te souviens plus des dates</span>}
+            </Field>
           </div>
+          {formDateError && <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 4 }}>{formDateError}</div>}
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
             <button type="button" onClick={() => setAddOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text)", cursor: "pointer" }}>Annuler</button>
             <button type="submit" disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "..." : "Ajouter"}</button>

@@ -18,6 +18,7 @@ interface CustomSelectProps {
   disabled?: boolean;
   style?: React.CSSProperties;
   required?: boolean;
+  onCreateOption?: (label: string) => Promise<void>;
 }
 
 export function CustomSelect({
@@ -29,6 +30,7 @@ export function CustomSelect({
   disabled = false,
   style,
   required,
+  onCreateOption,
 }: CustomSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -41,10 +43,22 @@ export function CustomSelect({
     ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
     : options;
 
+  const exactMatch = search.trim().length > 0 && options.some(
+    (o) => o.value !== "" && o.label.toLowerCase() === search.trim().toLowerCase()
+  );
+  const showCreate = searchable && !!onCreateOption && search.trim().length > 0 && !exactMatch;
+
   const close = useCallback(() => {
     setOpen(false);
     setSearch("");
   }, []);
+
+  const handleCreateOption = async () => {
+    if (!onCreateOption) return;
+    const label = search.trim();
+    close();
+    await onCreateOption(label);
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -165,7 +179,7 @@ export function CustomSelect({
             </div>
           )}
           <div style={{ maxHeight: 220, overflowY: "auto", padding: "4px 0" }}>
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && !showCreate ? (
               <div style={{ padding: "10px 14px", fontSize: 12, color: "var(--text-muted)" }}>
                 Aucun résultat
               </div>
@@ -213,6 +227,31 @@ export function CustomSelect({
                   )}
                 </button>
               ))
+            )}
+            {showCreate && (
+              <button
+                type="button"
+                onClick={handleCreateOption}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "9px 14px",
+                  fontSize: 13,
+                  color: "var(--accent)",
+                  background: "transparent",
+                  borderTop: filtered.length > 0 ? "1px solid var(--border)" : "none",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  fontFamily: "var(--font-sans)",
+                  fontWeight: 500,
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,126,248,0.07)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+              >
+                + Créer &ldquo;{search.trim()}&rdquo;
+              </button>
             )}
           </div>
         </div>
