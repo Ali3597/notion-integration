@@ -34,6 +34,7 @@ type ShoppingStats = {
   recent_items: { name: string; estimated_price: string | null }[];
 };
 type HabitItem = { id: string; name: string; icon: string | null; color: string | null; completed_today: boolean };
+type JournalReviewItem = { id: string; title: string; review_date: string };
 type DashboardData = {
   reminders: Reminder[];
   projects: ProjectWithTasks[];
@@ -42,6 +43,7 @@ type DashboardData = {
   meditation: MeditationStats;
   books_reading: BookReading[];
   shopping: ShoppingStats;
+  journal_review: JournalReviewItem[];
 };
 type CalendarEvent = { title: string; start: string; end: string; allDay: boolean };
 
@@ -759,6 +761,55 @@ function HabitsWidget({ habits: initial }: { habits?: HabitItem[] }) {
   );
 }
 
+// ── Journal widget ────────────────────────────────────────────────────────────
+
+function JournalWidget({ items }: { items?: JournalReviewItem[] }) {
+  const loading = items === undefined;
+
+  function getReviewBadge(dateStr: string): { label: string; color: string } {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const due = new Date(y, m - 1, d);
+    const diff = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff < 0) return { label: "En retard", color: "var(--red)" };
+    if (diff === 0) return { label: "Aujourd'hui", color: "var(--accent)" };
+    return { label: `Dans ${diff}j`, color: "var(--text-muted)" };
+  }
+
+  return (
+    <Widget title="Journal — À revoir" icon="📖" action={{ label: "Ouvrir →", href: "/journal" }}>
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Skeleton /><Skeleton /><Skeleton />
+        </div>
+      ) : items.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>✅ Aucun thread à revoir cette semaine</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {items.map((item) => {
+            const badge = getReviewBadge(item.review_date);
+            return (
+              <Link
+                key={item.id}
+                href={`/journal?entry=${item.id}`}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, textDecoration: "none" }}
+              >
+                <span style={{ fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                  {item.title}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, flexShrink: 0 }}>
+                  {badge.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </Widget>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function DashboardWidgets({ userName }: { userName: string }) {
@@ -830,6 +881,9 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
 
         {/* Shopping — col span 1 */}
         <ShoppingWidget shopping={dashboard?.shopping} />
+
+        {/* Journal — col span 1 */}
+        <JournalWidget items={dashboard?.journal_review} />
       </div>
     </div>
   );

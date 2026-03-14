@@ -132,3 +132,19 @@ export const habit_logs = pgTable("habit_logs", {
 }, (t) => ({
   habit_date_unique: unique().on(t.habit_id, t.completed_date),
 }));
+
+export const journal_entries = pgTable("journal_entries", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  pinned: boolean("pinned").default(false),
+  created_at: timestamp("created_at").defaultNow(),
+  updated_at: timestamp("updated_at").defaultNow(),
+});
+
+export const journal_logs = pgTable("journal_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  entry_id: uuid("entry_id").references(() => journal_entries.id, { onDelete: "cascade" }).notNull(),
+  content: text("content").notNull(),
+  review_date: date("review_date"),
+  created_at: timestamp("created_at").defaultNow(),
+});

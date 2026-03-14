@@ -24,6 +24,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Quotidien",
     items: [
       { href: "/habits", icon: "🎯", label: "Habitudes" },
+      { href: "/journal", icon: "📖", label: "Journal" },
       { href: "/petitbambou", icon: "🧘", label: "Petit Bambou" },
       { href: "/shopping", icon: "🛒", label: "Shopping" },
     ],

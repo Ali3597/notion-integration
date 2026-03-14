@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, sessions, meditations, shopping_items, reminders, books } from "@/lib/schema";
-import { eq, gte, sql, desc } from "drizzle-orm";
+import { projects, tasks, sessions, meditations, shopping_items, reminders, books, journal_entries } from "@/lib/schema";
+import { eq, gte, lte, sql, desc } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -16,6 +16,7 @@ export async function GET() {
       shoppingStats,
       reminderStats,
       libraryStats,
+      journalReview,
     ] = await Promise.all([
       db.select({
         total: sql<number>`count(*)`,
@@ -47,6 +48,14 @@ export async function GET() {
         reading: sql<number>`count(*) filter (where status = 'En cours')`,
         read: sql<number>`count(*) filter (where status = 'Lu')`,
       }).from(books),
+
+      db.select({
+        id: journal_entries.id,
+        title: journal_entries.title,
+        review_date: sql<string>`(select review_date::text from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null order by jl.created_at desc limit 1)`,
+      })
+        .from(journal_entries)
+        .where(sql`exists (select 1 from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null and jl.review_date <= (current_date + interval '7 days')::date)`),
     ]);
 
     const rs = reminderStats[0];
@@ -59,6 +68,7 @@ export async function GET() {
       shopping: shoppingStats[0],
       reminders: { undone: Number(rs.undone), overdue: Number(rs.overdue) },
       library: { reading: Number(ls.reading), read: Number(ls.read) },
+      journal_review: journalReview.filter((e) => e.review_date !== null),
     });
   } catch (error) {
     console.error(error);

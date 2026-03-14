@@ -11,6 +11,8 @@ import {
   reminders,
   habits,
   habit_logs,
+  journal_entries,
+  journal_logs,
 } from "@/lib/schema";
 import { eq, and, gte, lte, desc, asc, sql, inArray } from "drizzle-orm";
 
@@ -37,6 +39,7 @@ export async function GET() {
       recentShoppingItems,
       habitsToday,
       habitLogsToday,
+      journalReview,
     ] = await Promise.all([
       // Urgent reminders: non-done, due within 7 days (including overdue)
       db
@@ -121,6 +124,21 @@ export async function GET() {
         .select({ habit_id: habit_logs.habit_id })
         .from(habit_logs)
         .where(eq(habit_logs.completed_date, todayStr)),
+
+      // Journal entries with review_date due within 7 days or overdue
+      db
+        .select({
+          id: journal_entries.id,
+          title: journal_entries.title,
+          review_date: sql<string>`(select review_date::text from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null order by jl.created_at desc limit 1)`,
+        })
+        .from(journal_entries)
+        .where(
+          sql`exists (select 1 from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null and jl.review_date <= ${in7DaysStr}::date)`
+        )
+        .orderBy(
+          sql`(select review_date from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null order by jl.created_at desc limit 1) asc nulls last`
+        ),
     ]);
 
     // Fetch tasks for active projects
@@ -203,6 +221,7 @@ export async function GET() {
         remaining_budget: Number(shoppingRow[0]?.remaining_budget ?? 0),
         recent_items: recentShoppingItems,
       },
+      journal_review: journalReview.filter((e) => e.review_date !== null),
     });
   } catch (error) {
     console.error(error);
