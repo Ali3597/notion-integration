@@ -22,6 +22,11 @@ type BookStatus = "En cours" | "Souhait" | "Pas Lu" | "Lu";
 const BOOK_STATUSES: BookStatus[] = ["En cours", "Souhait", "Pas Lu", "Lu"];
 const SERIE_STATUSES = ["En cours", "Terminé", "Abandonné"];
 
+// ─────────────────────────── Open Library types ───────────────────────────
+
+type OLBook = { title: string; authors: string[]; cover_url: string | null; year: number | null; subjects: string[] };
+type OLAuthor = { name: string; photo_url: string | null; birth_year: string | null; top_subjects: string[] };
+
 // ─────────────────────────── Star Rating ──────────────────────────────────
 
 function StarRating({ value, onChange, readonly }: { value: number | null; onChange?: (n: number | null) => void; readonly?: boolean }) {
@@ -48,6 +53,163 @@ function StarRating({ value, onChange, readonly }: { value: number | null; onCha
         </span>
       ))}
     </span>
+  );
+}
+
+// ─────────────────────────── Open Library search components ───────────────
+
+/** Debounced search field + dropdown for book creation */
+function BookSearchField({ onSelect }: { onSelect: (book: OLBook) => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<OLBook[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function handleChange(val: string) {
+    setQuery(val);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!val.trim()) { setResults([]); setOpen(false); return; }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true); setError(false);
+      try {
+        const res = await fetch(`/api/library/search/books?q=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        if (Array.isArray(data)) { setResults(data); setOpen(data.length > 0); }
+      } catch { setError(true); }
+      setLoading(false);
+    }, 400);
+  }
+
+  function handleSelect(book: OLBook) {
+    onSelect(book);
+    setQuery(""); setResults([]); setOpen(false);
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", marginBottom: 4 }}>
+      <Field label="Recherche rapide">
+        <div style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
+          <input value={query} onChange={(e) => handleChange(e.target.value)} style={{ ...inputStyle, paddingLeft: 30 }} placeholder="Titre ou titre + auteur…" />
+          {loading && <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "var(--text-muted)" }}>…</span>}
+        </div>
+        {error && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Recherche indisponible</span>}
+      </Field>
+      {open && results.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 10, boxShadow: "var(--shadow-md)", zIndex: 600, maxHeight: 280, overflowY: "auto" }}>
+          {results.map((r, i) => (
+            <div key={i} onClick={() => handleSelect(r)}
+              style={{ display: "flex", gap: 10, padding: "8px 12px", cursor: "pointer", borderBottom: i < results.length - 1 ? "1px solid var(--border)" : "none", alignItems: "center" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--bg)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ""; }}>
+              <div style={{ width: 30, height: 42, borderRadius: 3, flexShrink: 0, overflow: "hidden", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+                {r.cover_url ? <img src={r.cover_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "📚"}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</div>
+                {r.authors.length > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{r.authors.slice(0, 2).join(", ")}</div>}
+                {r.year && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{r.year}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Inline cover search for existing books / book drawer */
+function CoverSearchField({ title, onSelect }: { title: string; onSelect: (url: string) => void }) {
+  const [results, setResults] = useState<OLBook[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  async function search() {
+    if (!title.trim()) return;
+    setLoading(true); setError(false);
+    try {
+      const res = await fetch(`/api/library/search/books?q=${encodeURIComponent(title)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) setResults(data.filter((r: OLBook) => r.cover_url));
+    } catch { setError(true); }
+    setLoading(false); setSearched(true);
+  }
+
+  if (!searched) {
+    return (
+      <button type="button" onClick={search} disabled={loading}
+        style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text-muted)", cursor: "pointer" }}>
+        {loading ? "…" : "🔍 Chercher la couverture"}
+      </button>
+    );
+  }
+  if (error) return <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Recherche indisponible</span>;
+  if (results.length === 0) return <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Aucune couverture trouvée</span>;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+      {results.map((r, i) => (
+        <button key={i} type="button" onClick={() => onSelect(r.cover_url!)} title={r.title}
+          style={{ padding: 0, border: "2px solid var(--border)", borderRadius: 4, cursor: "pointer", overflow: "hidden", background: "none" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}>
+          <img src={r.cover_url!} alt={r.title} style={{ width: 38, height: 54, objectFit: "cover", display: "block" }} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Author photo search — shows clickable photo thumbnails */
+function AuthorPhotoSearch({ name, onSelect }: { name: string; onSelect: (url: string) => void }) {
+  const [results, setResults] = useState<OLAuthor[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  async function search() {
+    if (!name.trim()) return;
+    setLoading(true); setError(false);
+    try {
+      const res = await fetch(`/api/library/search/authors?q=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) setResults(data.filter((a: OLAuthor) => a.photo_url));
+    } catch { setError(true); }
+    setLoading(false); setSearched(true);
+  }
+
+  if (!searched) {
+    return (
+      <button type="button" onClick={search} disabled={loading}
+        style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text-muted)", cursor: "pointer" }}>
+        {loading ? "…" : "🔍 Chercher une photo"}
+      </button>
+    );
+  }
+  if (error) return <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Recherche indisponible</span>;
+  if (results.length === 0) return <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Aucune photo trouvée</span>;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+      {results.map((a, i) => (
+        <button key={i} type="button" onClick={() => onSelect(a.photo_url!)} title={a.name}
+          style={{ padding: 0, border: "2px solid var(--border)", borderRadius: "50%", cursor: "pointer", overflow: "hidden", background: "none" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}>
+          <img src={a.photo_url!} alt={a.name} style={{ width: 40, height: 40, objectFit: "cover", display: "block", borderRadius: "50%" }} />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -340,7 +502,13 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate, onRe
           />
         </Field>
         <Field label="URL couverture">
-          <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={inputStyle} placeholder="https://..." />
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="https://..." />
+            <div style={{ width: 40, height: 56, borderRadius: 4, flexShrink: 0, overflow: "hidden", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid var(--border)", fontSize: 18 }}>
+              {imageUrl ? <img src={imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : "📚"}
+            </div>
+          </div>
+          {!imageUrl && <div style={{ marginTop: 6 }}><CoverSearchField title={title} onSelect={(url) => setImageUrl(url)} /></div>}
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Début">
@@ -490,6 +658,49 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
     if (data.id) { setForm(f => ({ ...f, genre_id: data.id })); onUpdate(); }
   }
 
+  async function handleBookSelect(book: OLBook) {
+    setFormDateError(null);
+    const updates: Partial<typeof form> = { title: book.title, image_url: book.cover_url ?? "" };
+    // Match genre from subjects (case-insensitive)
+    if (book.subjects.length > 0) {
+      const match = genres.find(g => book.subjects.some(s => s.toLowerCase().includes(g.name.toLowerCase())));
+      if (match) updates.genre_id = match.id;
+    }
+    // Match or auto-create author
+    if (book.authors.length > 0) {
+      const authorName = book.authors[0];
+      const existing = authors.find(a => a.name.toLowerCase() === authorName.toLowerCase());
+      if (existing) {
+        updates.author_id = existing.id;
+      } else {
+        const res = await fetch("/api/library/authors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: authorName, photo_url: null }),
+        });
+        const created = await res.json();
+        if (created.id) {
+          updates.author_id = created.id;
+          onUpdate();
+          // Fire-and-forget: enrich author photo
+          fetch(`/api/library/search/authors?q=${encodeURIComponent(authorName)}`)
+            .then(r => r.json())
+            .then(results => {
+              if (Array.isArray(results) && results[0]?.photo_url) {
+                fetch(`/api/library/authors?id=${created.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ photo_url: results[0].photo_url }),
+                }).then(() => onUpdate()).catch(() => { /* ignore */ });
+              }
+            })
+            .catch(() => { /* ignore */ });
+        }
+      }
+    }
+    setForm(f => ({ ...f, ...updates }));
+  }
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
@@ -579,6 +790,8 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
       {/* Add book modal */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Ajouter un livre">
         <form onSubmit={handleAdd}>
+          <BookSearchField onSelect={handleBookSelect} />
+          <div style={{ borderTop: "1px solid var(--border)", marginBottom: 14 }} />
           <Field label="Titre *">
             <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} style={inputStyle} autoFocus required />
           </Field>
@@ -618,7 +831,12 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
             />
           </Field>
           <Field label="URL couverture">
-            <input value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} style={inputStyle} placeholder="https://..." />
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <input value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} style={{ ...inputStyle, flex: 1 }} placeholder="https://..." />
+              <div style={{ width: 40, height: 56, borderRadius: 4, flexShrink: 0, overflow: "hidden", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid var(--border)", fontSize: 18 }}>
+                {form.image_url ? <img src={form.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : "📚"}
+              </div>
+            </div>
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Début">
@@ -666,6 +884,7 @@ function TabAuthors({ authors, books, onUpdate }: { authors: DBAuthor[]; books: 
   const [name, setName] = useState(""); const [photoUrl, setPhotoUrl] = useState(""); const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState(""); const [editPhoto, setEditPhoto] = useState("");
+  const [showEditPhotoSearch, setShowEditPhotoSearch] = useState(false);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -733,10 +952,16 @@ function TabAuthors({ authors, books, onUpdate }: { authors: DBAuthor[]; books: 
                     {editId === selected.id ? (
                       <>
                         <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ ...inputStyle, marginBottom: 6 }} />
-                        <input value={editPhoto} onChange={(e) => setEditPhoto(e.target.value)} style={inputStyle} placeholder="URL photo" />
+                        <input value={editPhoto} onChange={(e) => { setEditPhoto(e.target.value); setShowEditPhotoSearch(false); }} style={inputStyle} placeholder="URL photo" />
+                        <div style={{ marginTop: 4 }}>
+                          {!showEditPhotoSearch
+                            ? <button type="button" onClick={() => setShowEditPhotoSearch(true)} style={{ fontSize: 11, padding: "3px 7px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text-muted)", cursor: "pointer" }}>🔍 Chercher une photo</button>
+                            : <AuthorPhotoSearch name={editName} onSelect={(url) => { setEditPhoto(url); setShowEditPhotoSearch(false); }} />
+                          }
+                        </div>
                         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                          <button onClick={() => handleSaveEdit(selected.id)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>Sauver</button>
-                          <button onClick={() => setEditId(null)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, background: "var(--surface2)", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>Annuler</button>
+                          <button onClick={() => { handleSaveEdit(selected.id); setShowEditPhotoSearch(false); }} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>Sauver</button>
+                          <button onClick={() => { setEditId(null); setShowEditPhotoSearch(false); }} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, background: "var(--surface2)", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>Annuler</button>
                         </div>
                       </>
                     ) : (
@@ -772,7 +997,17 @@ function TabAuthors({ authors, books, onUpdate }: { authors: DBAuthor[]; books: 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Ajouter un auteur">
         <form onSubmit={handleAdd}>
           <Field label="Nom *"><input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} autoFocus required /></Field>
-          <Field label="URL photo"><input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} style={inputStyle} placeholder="https://..." /></Field>
+          <Field label="URL photo">
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="https://..." />
+              {photoUrl && (
+                <div style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid var(--border)", fontSize: 16 }}>
+                  <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                </div>
+              )}
+            </div>
+            {name.trim() && <div style={{ marginTop: 6 }}><AuthorPhotoSearch name={name} onSelect={(url) => setPhotoUrl(url)} /></div>}
+          </Field>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button type="button" onClick={() => setAddOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text)", cursor: "pointer" }}>Annuler</button>
             <button type="submit" disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>{saving ? "..." : "Ajouter"}</button>
