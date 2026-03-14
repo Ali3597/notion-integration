@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { CustomSelect } from "@/components/CustomSelect";
 import { ColFilterHeader } from "@/components/ColFilterHeader";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
@@ -299,13 +300,28 @@ function CategoryTable({ items, onTogglePurchased, onEdit, onDelete, onNewItem, 
 
 // ─────────────────────────── Main Page ────────────────────────────────────
 
+const VALID_SHOPPING_TABS: Tab[] = ["general", "categories"];
+
 export default function ShoppingPage() {
+  useDynamicFavicon("🛒");
+  useEffect(() => { document.title = "Shopping — life×hub"; }, []);
+
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<Tab>("general");
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "general";
+    const p = new URLSearchParams(window.location.search).get("tab") as Tab;
+    return VALID_SHOPPING_TABS.includes(p) ? p : "general";
+  });
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
+  }, [tab]);
   const [purchasedFilter, setPurchasedFilter] = useState<PurchasedFilter>("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sortCol, setSortCol] = useState<SortCol>("date");

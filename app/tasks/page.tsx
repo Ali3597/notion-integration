@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { DBTask, DBProject } from "@/types";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { CustomSelect } from "@/components/CustomSelect";
 import { ColFilterHeader } from "@/components/ColFilterHeader";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
@@ -34,6 +35,8 @@ function TaskCheckbox({ done, onChange }: { done: boolean; onChange: () => void 
 // ─────────────────────────── Page ─────────────────────────────────────────
 
 export default function TasksPage() {
+  useDynamicFavicon("✅");
+  useEffect(() => { document.title = "Tâches — life×hub"; }, []);
   const [tasks, setTasks] = useState<DBTask[]>([]);
   const [projects, setProjects] = useState<DBProject[]>([]);
   const [loading, setLoading] = useState(true);

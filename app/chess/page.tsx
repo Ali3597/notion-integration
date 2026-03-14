@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { ChessStats } from "@/types";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 
 const DB_LABELS: Record<string, string> = {
   NOTION_CHESS_RATING_DB:   "📈 Évolution du Rating",
@@ -15,6 +16,8 @@ const DB_LABELS: Record<string, string> = {
 type SyncMode = { type: "months"; value: number } | { type: "period"; value: "week" | "yesterday" };
 
 export default function ChessPage() {
+  useDynamicFavicon("♟️");
+  useEffect(() => { document.title = "Chess — life×hub"; }, []);
   const [username, setUsername]     = useState<string | null>(null);
   const [stats, setStats]           = useState<ChessStats | null>(null);
   const [dbStatus, setDbStatus]     = useState<Record<string, boolean>>({});

@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import DashboardWidgets from "@/app/_components/DashboardWidgets";
+
+export const metadata: Metadata = { title: { absolute: "life×hub — Dashboard" } };
 
 type NavItem = { href: string; icon: string; label: string; active?: boolean };
 

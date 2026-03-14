@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import type { DBProject } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
 import { ColFilterHeader } from "@/components/ColFilterHeader";
@@ -500,6 +501,8 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
 }
 
 export default function ProjectsPage() {
+  useDynamicFavicon("📁");
+  useEffect(() => { document.title = "Projets — life×hub"; }, []);
   const router = useRouter();
   const [projects, setProjects] = useState<ProjectDetail[]>([]);
   const [loading, setLoading] = useState(true);

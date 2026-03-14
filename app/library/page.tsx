@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { DBBook, DBAuthor, DBGenre, DBSerie, DBBookNote } from "@/types";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { CustomSelect } from "@/components/CustomSelect";
 import { DatePicker } from "@/components/DatePicker";
 import {
@@ -1433,8 +1434,24 @@ function TabStats() {
 
 // ─────────────────────────── Main Page ────────────────────────────────────
 
+const VALID_LIBRARY_TABS: MainTab[] = ["library", "authors", "genres", "series", "notes", "stats"];
+
 export default function LibraryPage() {
-  const [tab, setTab] = useState<MainTab>("library");
+  useDynamicFavicon("📚");
+  useEffect(() => { document.title = "Bibliothèque — life×hub"; }, []);
+
+  const [tab, setTab] = useState<MainTab>(() => {
+    if (typeof window === "undefined") return "library";
+    const p = new URLSearchParams(window.location.search).get("tab") as MainTab;
+    return VALID_LIBRARY_TABS.includes(p) ? p : "library";
+  });
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
+  }, [tab]);
+
   const [booksList, setBooksList] = useState<DBBook[]>([]);
   const [authorsList, setAuthorsList] = useState<DBAuthor[]>([]);
   const [genresList, setGenresList] = useState<DBGenre[]>([]);

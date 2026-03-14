@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { CustomSelect } from "@/components/CustomSelect";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -55,8 +56,23 @@ function todayStr(): string {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const VALID_HABITS_TABS: Tab[] = ["today", "calendar", "stats"];
+
 export default function HabitsPage() {
-  const [tab, setTab] = useState<Tab>("today");
+  useDynamicFavicon("🎯");
+  useEffect(() => { document.title = "Habitudes — life×hub"; }, []);
+
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "today";
+    const p = new URLSearchParams(window.location.search).get("tab") as Tab;
+    return VALID_HABITS_TABS.includes(p) ? p : "today";
+  });
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
+  }, [tab]);
   const [habits, setHabits] = useState<DBHabitWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);

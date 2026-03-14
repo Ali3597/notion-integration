@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { Spinner } from "@/components/Spinner";
 import { DatePicker } from "@/components/DatePicker";
 
@@ -194,6 +195,8 @@ function SortButton({ value, onChange }: { value: SortKey; onChange: (v: SortKey
 // ─────────────────────────── Page ─────────────────────────────────────────
 
 export default function RemindersPage() {
+  useDynamicFavicon("🔔");
+  useEffect(() => { document.title = "Rappels — life×hub"; }, []);
   const [remindersList, setRemindersList] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 

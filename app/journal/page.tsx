@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,8 @@ function reviewDateStatus(dateStr: string): "future" | "today" | "overdue" {
 // ── Main content (needs useSearchParams) ──────────────────────────────────────
 
 function JournalContent() {
+  useDynamicFavicon("📖");
+  useEffect(() => { document.title = "Journal — life×hub"; }, []);
   const searchParams = useSearchParams();
   const router = useRouter();
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import type { PBMetrics } from "@/types";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 
@@ -919,8 +920,23 @@ const calStyles: Record<string, React.CSSProperties> = {
 
 // ─────────────────────────── Main Page ────────────────────────────────────
 
+const VALID_PB_TABS: Tab[] = ["apercu", "historique", "calendrier", "stats"];
+
 export default function PetitBambouPage() {
-  const [tab, setTab] = useState<Tab>("apercu");
+  useDynamicFavicon("🧘");
+  useEffect(() => { document.title = "Petit Bambou — life×hub"; }, []);
+
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "apercu";
+    const p = new URLSearchParams(window.location.search).get("tab") as Tab;
+    return VALID_PB_TABS.includes(p) ? p : "apercu";
+  });
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
+  }, [tab]);
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "apercu", label: "Aperçu" },

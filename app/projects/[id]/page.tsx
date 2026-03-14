@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import {
   DndContext,
   DragOverlay,
@@ -557,6 +558,7 @@ function getColumnId(id: string, cols: Record<string, DBTask[]>): string | null 
 
 export default function ProjectKanbanPage() {
   const { id } = useParams<{ id: string }>();
+  useDynamicFavicon("📁");
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [columns, setColumns] = useState<Record<string, DBTask[]>>({
@@ -574,6 +576,10 @@ export default function ProjectKanbanPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTask, setModalTask] = useState<DBTask | null>(null);
   const [modalStatus, setModalStatus] = useState("Non commencé");
+
+  useEffect(() => {
+    document.title = project ? `${project.name} — life×hub` : "Projets — life×hub";
+  }, [project]);
 
   const projectMinutes = project?.own_minutes ?? null;
 
@@ -719,7 +725,12 @@ export default function ProjectKanbanPage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", padding: "48px 40px 64px", display: "flex", flexDirection: "column", gap: 32 }}>
-      <Link href="/projects" className="btn-back">← Projets</Link>
+      {/* Breadcrumb */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+        <Link href="/projects" style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}>Projets</Link>
+        <span style={{ color: "var(--text-muted)" }}>›</span>
+        <span style={{ color: "var(--text)" }}>{project.name}</span>
+      </div>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>

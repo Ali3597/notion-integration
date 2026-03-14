@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePomodoroContext, MODES } from "@/lib/pomodoro-context";
 import type { Mode } from "@/lib/pomodoro-context";
 import { CustomSelect } from "@/components/CustomSelect";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -23,6 +25,8 @@ function formatDate(iso: string | null) {
 }
 
 export default function PomodoroPage() {
+  useDynamicFavicon("⏱");
+  useEffect(() => { document.title = "Pomodoro — life×hub"; }, []);
   const {
     projects, sessions, todayStats, loadingProjects,
     selectedProject, mode, secondsLeft, running,
