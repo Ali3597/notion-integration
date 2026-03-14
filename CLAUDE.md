@@ -35,6 +35,9 @@ GOOGLE_CLIENT_SECRET=<from Google Cloud Console>
 # iCloud Calendar (dashboard widget)
 ICAL_URL=<URL ICS publique iCloud — jamais exposée côté client>
 
+# Google Books (recherche bibliothèque — 1000 req/jour gratuit)
+GOOGLE_BOOKS_API_KEY=<clé Google Cloud Console — API "Books API">
+
 # Chess.com (optionnel — intégration Notion chess)
 NOTION_TOKEN=secret_...
 CHESS_USERNAME=<chess.com username>
@@ -99,8 +102,8 @@ app/
       series/route.ts             # GET/POST/PATCH/DELETE — series with author_name + book_count
       notes/route.ts              # GET (optional ?book_id=) / POST/PATCH/DELETE — book notes
       search/
-        books/route.ts            # GET ?q= — server-side proxy to openlibrary.org/search.json (no CORS)
-        authors/route.ts          # GET ?q= — server-side proxy to openlibrary.org/search/authors.json
+        books/route.ts            # GET ?q= — Google Books API (langRestrict=fr first, then broad); BnF SPARQL fallback for covers; requires GOOGLE_BOOKS_API_KEY
+        authors/route.ts          # GET ?q= — BnF SPARQL (data.bnf.fr) first; Open Library fallback for photos
     habits/route.ts               # GET (with stats: streak, completion_rate, completed_today) / POST / PATCH ?id= / DELETE ?id=
     habits/log/route.ts           # GET ?from=&to=&habit_id= / POST { habit_id, completed_date, note? } / DELETE ?habit_id=&date=
     habits/stats/route.ts         # GET ?id=&days= — heatmap, byDayOfWeek, byMonth, streakHistory for Recharts
@@ -218,7 +221,9 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - `book_notes` cascade-deletes when the parent book is deleted.
 - The `BookDrawer` component handles inline note creation/editing/deletion directly without a separate page.
 - Overview stat: `library: { reading, read }` — count of books with status `"En cours"` and `"Lu"`.
-- **Open Library enrichment** — all calls are server-side (no CORS):
+- **Book/Author search enrichment** — all calls are server-side (no CORS):
+  - `/api/library/search/books`: Google Books API primary (French first via `langRestrict=fr`; falls back to all languages if < 3 results); BnF SPARQL (`data.bnf.fr`) as cover fallback. Requires `GOOGLE_BOOKS_API_KEY` env var (returns 503 if missing). Cover URLs always `https://`, `&edge=curl` stripped. Titles cleaned of leading French articles before `intitle:` query.
+  - `/api/library/search/authors`: BnF SPARQL primary (better for Francophone authors); Open Library fallback for photos when BnF has no `foaf:depiction`. Returns `{ name, photo_url, birth_year, top_subjects }`.
   - `BookSearchField`: debounced text input in the add-book modal → calls `/api/library/search/books` → dropdown with cover thumbnails → on select, auto-fills title/cover/author/genre, auto-creates missing author with fire-and-forget photo enrichment
   - `CoverSearchField`: "Chercher la couverture" button → triggers book search → shows cover grid to pick from — present in both the creation modal and the book drawer when no cover is set
   - `AuthorPhotoSearch`: "Chercher une photo" button in author add modal and edit drawer → calls `/api/library/search/authors` → shows circular photo options
