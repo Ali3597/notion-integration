@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { tasks, sessions } from "@/lib/schema";
-import { eq, and, gte, isNotNull, sql } from "drizzle-orm";
+import { tasks, sessions, project_relations, projects } from "@/lib/schema";
+import { eq, and, gte, isNotNull, sql, inArray } from "drizzle-orm";
 
 /** Monday of the week that is `offsetWeeks` weeks ago (local timezone). */
 function getWeekStart(offsetWeeks: number): Date {
@@ -35,9 +35,22 @@ export async function GET(
   const { id } = await params;
 
   try {
+    // Resolve child project IDs (1-level deep)
+    const childRels = await db
+      .select({ child_id: project_relations.child_id, child_name: projects.name })
+      .from(project_relations)
+      .leftJoin(projects, eq(projects.id, project_relations.child_id))
+      .where(eq(project_relations.parent_id, id));
+
+    const childIds = childRels.map((r) => r.child_id);
+    const isParent = childIds.length > 0;
+
+    // All project IDs to aggregate (own + children)
+    const allIds = [id, ...childIds];
+
     const [taskStats, totalRow, sessionWeekRows, taskWeekRows, dowRows, monthlyRows] =
       await Promise.all([
-        // Task completion breakdown
+        // Task completion — own project only (children have their own kanban)
         db
           .select({
             total: sql<number>`count(*)`,
@@ -47,16 +60,16 @@ export async function GET(
           .from(tasks)
           .where(eq(tasks.project_id, id)),
 
-        // Total session minutes
+        // Total session minutes — own + children
         db
           .select({
             minutes: sql<number>`coalesce(round(sum(extract(epoch from (end_time - start_time)) / 60)), 0)`,
             session_count: sql<number>`count(*)`,
           })
           .from(sessions)
-          .where(and(eq(sessions.project_id, id), isNotNull(sessions.end_time))),
+          .where(and(inArray(sessions.project_id, allIds), isNotNull(sessions.end_time))),
 
-        // Sessions grouped by ISO week — last 4 weeks
+        // Sessions grouped by ISO week — last 4 weeks — own + children
         db
           .select({
             week: sql<string>`to_char(date_trunc('week', start_time), 'YYYY-MM-DD')`,
@@ -65,7 +78,7 @@ export async function GET(
           .from(sessions)
           .where(
             and(
-              eq(sessions.project_id, id),
+              inArray(sessions.project_id, allIds),
               isNotNull(sessions.end_time),
               gte(sessions.start_time, weeksAgo(4)),
             ),
@@ -73,7 +86,7 @@ export async function GET(
           .groupBy(sql`date_trunc('week', start_time)`)
           .orderBy(sql`date_trunc('week', start_time)`),
 
-        // Tasks grouped by creation week — last 8 weeks
+        // Tasks grouped by creation week — last 8 weeks — own project only
         db
           .select({
             week: sql<string>`to_char(date_trunc('week', created_at), 'YYYY-MM-DD')`,
@@ -85,18 +98,18 @@ export async function GET(
           .groupBy(sql`date_trunc('week', created_at)`)
           .orderBy(sql`date_trunc('week', created_at)`),
 
-        // Time by day of week (all-time)
+        // Time by day of week (all-time) — own + children
         db
           .select({
             dow: sql<number>`extract(dow from start_time)`,
             minutes: sql<number>`coalesce(round(sum(extract(epoch from (end_time - start_time)) / 60)), 0)`,
           })
           .from(sessions)
-          .where(and(eq(sessions.project_id, id), isNotNull(sessions.end_time)))
+          .where(and(inArray(sessions.project_id, allIds), isNotNull(sessions.end_time)))
           .groupBy(sql`extract(dow from start_time)`)
           .orderBy(sql`extract(dow from start_time)`),
 
-        // Monthly — last 6 months
+        // Monthly — last 6 months — own + children
         db
           .select({
             month: sql<string>`to_char(start_time, 'YYYY-MM')`,
@@ -106,7 +119,7 @@ export async function GET(
           .from(sessions)
           .where(
             and(
-              eq(sessions.project_id, id),
+              inArray(sessions.project_id, allIds),
               isNotNull(sessions.end_time),
               gte(sessions.start_time, weeksAgo(26)),
             ),
@@ -114,6 +127,31 @@ export async function GET(
           .groupBy(sql`to_char(start_time, 'YYYY-MM')`)
           .orderBy(sql`to_char(start_time, 'YYYY-MM')`),
       ]);
+
+    // Per-child breakdown (only for parent projects)
+    let childrenStats: { id: string; name: string; minutes: number; sessions: number }[] = [];
+    if (isParent && childIds.length > 0) {
+      const childRows = await db
+        .select({
+          project_id: sessions.project_id,
+          minutes: sql<number>`coalesce(round(sum(extract(epoch from (end_time - start_time)) / 60)), 0)`,
+          session_count: sql<number>`count(*)`,
+        })
+        .from(sessions)
+        .where(and(inArray(sessions.project_id, childIds), isNotNull(sessions.end_time)))
+        .groupBy(sessions.project_id);
+
+      const childMinMap = new Map(childRows.map((r) => [r.project_id, r]));
+      childrenStats = childRels.map((rel) => {
+        const row = childMinMap.get(rel.child_id);
+        return {
+          id: rel.child_id,
+          name: rel.child_name ?? "",
+          minutes: Number(row?.minutes ?? 0),
+          sessions: Number(row?.session_count ?? 0),
+        };
+      });
+    }
 
     const ts = taskStats[0];
     const total = Number(ts?.total ?? 0);
@@ -156,6 +194,8 @@ export async function GET(
       },
       totalMinutes: Number(totalRow[0]?.minutes ?? 0),
       sessionCount: Number(totalRow[0]?.session_count ?? 0),
+      isParent,
+      children: childrenStats,
       timeByWeek,
       tasksByWeek,
       timeByDow,

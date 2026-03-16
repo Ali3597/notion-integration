@@ -193,6 +193,13 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - `@/` path alias maps to project root (`tsconfig.json`).
 - No deployment — local only (`npm run dev`).
 
+## Pomodoro / Projects Module — Specific Notes
+
+- **Pomodoro double session bug (fixed)** : React Strict Mode invoque les state updaters deux fois. Le guard ref `timerEndFiredRef` dans `lib/pomodoro-context.tsx` empêche le double déclenchement de `handleTimerEndRef.current()` à l'intérieur du updater de `setSecondsLeft`.
+- **`/api/pomodoro/projects` — Temps Total** : ne jamais joindre `tasks` ET `sessions` dans la même requête Drizzle pour un projet — cela crée un produit cartésien qui multiplie la somme des durées. Utiliser des requêtes agrégées séparées (`GROUP BY project_id`) fusionnées en JS.
+- **Projets parents / enfants** : relation via `project_relations` (parent_id, child_id). La colonne "Temps total" dans `/projects` = `own_minutes` + somme des `own_minutes` des enfants directs. La page `/projects/[id]` pour un projet parent affiche des stats agrégées (sessions propres + enfants) : le KPI "Temps total" inclut les enfants, les graphiques (semaines, jours, mensuel) aussi. Un bloc "Répartition par sous-projet" avec barres relatives est affiché si `isParent=true`. Les tâches dans le kanban restent propres au projet courant (pas agrégées).
+- **`/api/pomodoro/projects/[id]/stats`** : retourne `isParent: boolean` et `children: { id, name, minutes, sessions }[]`. Toutes les requêtes session utilisent `inArray(sessions.project_id, [id, ...childIds])` pour agréger propre + enfants.
+
 ## Reminders Module — Specific Notes
 
 - Table `reminders` is **fully independent** from `tasks`, `projects`, `sessions` — no foreign keys.

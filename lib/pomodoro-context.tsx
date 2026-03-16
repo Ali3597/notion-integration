@@ -67,6 +67,8 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Guard against React Strict Mode double-invoke of setState updaters
+  const timerEndFiredRef = useRef(false);
 
   // Load projects once
   useEffect(() => {
@@ -176,11 +178,15 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
+    timerEndFiredRef.current = false;
     intervalRef.current = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
           clearInterval(intervalRef.current!);
-          handleTimerEndRef.current();
+          if (!timerEndFiredRef.current) {
+            timerEndFiredRef.current = true;
+            handleTimerEndRef.current();
+          }
           return 0;
         }
         return s - 1;

@@ -75,6 +75,8 @@ type ProjectStats = {
   completion: { total: number; done: number; in_progress: number; todo: number; pct: number };
   totalMinutes: number;
   sessionCount: number;
+  isParent: boolean;
+  children: { id: string; name: string; minutes: number; sessions: number }[];
   timeByWeek: { week: string; minutes: number }[];
   tasksByWeek: { week: string; created: number; completed: number }[];
   timeByDow: { day: string; minutes: number }[];
@@ -396,7 +398,7 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
 
   if (!stats) return null;
 
-  const { completion, totalMinutes, sessionCount, timeByWeek, tasksByWeek, timeByDow, monthly } = stats;
+  const { completion, totalMinutes, sessionCount, isParent, children, timeByWeek, tasksByWeek, timeByDow, monthly } = stats;
 
   const tooltipStyle = {
     contentStyle: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 },
@@ -427,7 +429,7 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
             ),
           },
           {
-            label: "Temps total",
+            label: isParent ? "Temps total (incl. sous-projets)" : "Temps total",
             value: formatMinutes(totalMinutes) ?? "—",
             sub: `${sessionCount} session${sessionCount !== 1 ? "s" : ""}`,
             accent: "var(--accent)",
@@ -457,6 +459,45 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
           </div>
         ))}
       </div>
+
+      {/* Child projects breakdown */}
+      {isParent && children.length > 0 && (
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 12, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+            Répartition par sous-projet
+          </div>
+          {(() => {
+            const maxMin = Math.max(...children.map((c) => c.minutes), 1);
+            return children
+              .slice()
+              .sort((a, b) => b.minutes - a.minutes)
+              .map((child) => (
+                <div key={child.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+                    <span style={{ fontWeight: 500, color: "var(--text)" }}>{child.name}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", color: child.minutes > 0 ? "var(--accent)" : "var(--text-muted)", fontSize: 12 }}>
+                      {formatMinutes(child.minutes) ?? "—"}
+                      {child.sessions > 0 && (
+                        <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-sans)", marginLeft: 6, fontSize: 11 }}>
+                          ({child.sessions} session{child.sessions !== 1 ? "s" : ""})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div style={{ height: 5, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${Math.round((child.minutes / maxMin) * 100)}%`,
+                      background: child.minutes > 0 ? "var(--accent)" : "transparent",
+                      borderRadius: 3,
+                      transition: "width 0.4s ease",
+                    }} />
+                  </div>
+                </div>
+              ));
+          })()}
+        </div>
+      )}
 
       {/* Charts grid */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

@@ -7,7 +7,7 @@ Plateforme de productivité locale. Centralise tes outils en un seul endroit ave
 | Module | Route | Description |
 |--------|-------|-------------|
 | Pomodoro | `/pomodoro` | Sessions de travail chronométrées liées directement aux projets |
-| Projets | `/projects` | Vue tableau de tous tes projets avec stats de sessions agrégées |
+| Projets | `/projects` | Vue tableau de tous tes projets avec stats de sessions agrégées ; sous-projets hiérarchiques avec temps total consolidé |
 | Tâches | `/tasks` | Toutes les tâches filtrables par statut, priorité et projet |
 | Rappels | `/reminders` | Rappels du quotidien avec date limite, badges En retard / Aujourd'hui |
 | Habitudes | `/habits` | Suivi quotidien des habitudes avec streaks, calendrier et statistiques |
@@ -115,6 +115,7 @@ bash scripts/setup.sh  # Premier lancement : crée la DB + pousse le schéma
 - **Titre de l'onglet** : chaque page définit `document.title = "Module — life×hub"` via `useEffect` — sans emoji (déjà dans le favicon)
 - **Persistance de l'onglet actif** : `?tab=` dans l'URL via `window.history.replaceState`, état initial lu depuis `window.location.search` — concerne Library, PetitBambou, Habits, Shopping
 - **Bibliothèque — enrichissement Open Library** : routes serveur `/api/library/search/books` et `/api/library/search/authors` (proxy sans CORS). `BookSearchField` : saisie déboncée → dropdown avec couvertures → auto-remplit titre/couverture/auteur/genre. `CoverSearchField` : recherche de couverture de remplacement. `AuthorPhotoSearch` : recherche de photo auteur. Barre de recherche dans chaque onglet (filtrage client-side).
+- **Projets — sous-projets** : relation parent/enfant via `project_relations`. Colonne "Temps total" dans la liste = temps propre + temps des enfants. Page projet parent (`/projects/[id]`) : les stats (temps total, graphiques) agrègent les sessions propres + enfants ; bloc "Répartition par sous-projet" avec barre de progression relative.
 
 ## Ajouter un nouveau module
 

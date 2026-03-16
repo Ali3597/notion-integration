@@ -1,29 +1,35 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, sessions, project_relations } from "@/lib/schema";
+import { projects, project_relations } from "@/lib/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
   try {
-    // 1. Direct stats per project (own sessions + task count)
-    const rows = await db
-      .select({
-        id: projects.id,
-        name: projects.name,
-        status: projects.status,
-        type: projects.type,
-        created_at: projects.created_at,
-        task_count: sql<number>`count(distinct ${tasks.id})`,
-        session_count: sql<number>`count(distinct ${sessions.id})`,
-        own_minutes: sql<number>`coalesce(sum(extract(epoch from (${sessions.end_time} - ${sessions.start_time})) / 60) filter (where ${sessions.id} is not null), 0)`,
-      })
-      .from(projects)
-      .leftJoin(tasks, eq(tasks.project_id, projects.id))
-      .leftJoin(sessions, eq(sessions.project_id, projects.id))
-      .groupBy(projects.id)
-      .orderBy(projects.name);
+    // 1. All projects (no join — avoids cross-product)
+    const rows = await db.select().from(projects).orderBy(projects.name);
 
-    // 2. All relations
+    // 2. Session stats aggregated per project
+    const sessionAgg = await db.execute<{ project_id: string; session_count: string; own_minutes: string }>(sql`
+      SELECT project_id,
+             count(*) AS session_count,
+             coalesce(sum(extract(epoch from (end_time - start_time)) / 60), 0) AS own_minutes
+      FROM sessions
+      WHERE project_id IS NOT NULL
+      GROUP BY project_id
+    `);
+
+    // 3. Task count per project
+    const taskAgg = await db.execute<{ project_id: string; task_count: string }>(sql`
+      SELECT project_id, count(*) AS task_count
+      FROM tasks
+      WHERE project_id IS NOT NULL
+      GROUP BY project_id
+    `);
+
+    const sessionByProject = new Map(sessionAgg.rows.map(r => [r.project_id, r]));
+    const taskByProject = new Map(taskAgg.rows.map(r => [r.project_id, r]));
+
+    // 4. All relations
     const rels = await db.select().from(project_relations);
 
     // 3. Build maps
@@ -36,23 +42,28 @@ export async function GET() {
       parentsMap.get(rel.child_id)!.push(rel.parent_id);
     }
 
-    // 4. Compute total_minutes and enrich with parents/children
-    const projectById = new Map(rows.map(p => [p.id, p]));
+    // 5. Compute total_minutes and enrich with parents/children
+    const ownMinById = new Map(rows.map(p => [p.id, Number(sessionByProject.get(p.id)?.own_minutes ?? 0)]));
     const result = rows.map(p => {
       const childIds = childrenMap.get(p.id) ?? [];
       const parentIds = parentsMap.get(p.id) ?? [];
-      const ownMin = Number(p.own_minutes ?? 0);
-      const childrenOwnMin = childIds.reduce((sum, cid) => sum + Number(projectById.get(cid)?.own_minutes ?? 0), 0);
+      const ownMin = ownMinById.get(p.id) ?? 0;
+      const childrenOwnMin = childIds.reduce((sum, cid) => sum + (ownMinById.get(cid) ?? 0), 0);
+      const sess = sessionByProject.get(p.id);
+      const tasks = taskByProject.get(p.id);
 
       return {
         ...p,
+        task_count: Number(tasks?.task_count ?? 0),
+        session_count: Number(sess?.session_count ?? 0),
         own_minutes: ownMin,
         total_minutes: ownMin + childrenOwnMin,
-        parents: parentIds.map(pid => ({ id: pid, name: projectById.get(pid)?.name ?? "" })),
-        children: childIds.map(cid => {
-          const ch = projectById.get(cid);
-          return { id: cid, name: ch?.name ?? "", own_minutes: Number(ch?.own_minutes ?? 0) };
-        }),
+        parents: parentIds.map(pid => ({ id: pid, name: rows.find(r => r.id === pid)?.name ?? "" })),
+        children: childIds.map(cid => ({
+          id: cid,
+          name: rows.find(r => r.id === cid)?.name ?? "",
+          own_minutes: ownMinById.get(cid) ?? 0,
+        })),
       };
     });
 
