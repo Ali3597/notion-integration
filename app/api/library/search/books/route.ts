@@ -21,7 +21,8 @@ function normalizeGoogleItem(item: Record<string, unknown>): BookResult {
   if (cover_url) {
     cover_url = cover_url
       .replace(/^http:\/\//, "https://")
-      .replace(/&edge=curl/g, "");
+      .replace(/&edge=curl/g, "")
+      .replace(/zoom=\d/, "zoom=1");
   }
   const publishedDate = (info.publishedDate as string | undefined) ?? null;
   return {
@@ -38,15 +39,16 @@ function normalizeGoogleItem(item: Record<string, unknown>): BookResult {
 
 async function googleBooks(
   q: string,
+  author: string,
   langRestrict: boolean,
   apiKey: string,
 ): Promise<BookResult[]> {
   const cleaned = cleanTitle(q);
-  // Use intitle: for precision; fall back to raw query for the broad retry
-  const queryParam = langRestrict
+  let queryParam = langRestrict
     ? `intitle:${encodeURIComponent(cleaned)}`
     : encodeURIComponent(q);
-  let url = `https://www.googleapis.com/books/v1/volumes?q=${queryParam}&maxResults=8&key=${apiKey}`;
+  if (author.trim()) queryParam += `+inauthor:${encodeURIComponent(author.trim())}`;
+  let url = `https://www.googleapis.com/books/v1/volumes?q=${queryParam}&maxResults=10&key=${apiKey}`;
   if (langRestrict) url += "&langRestrict=fr";
 
   const res = await fetch(url, { cache: "no-store" });
@@ -55,8 +57,31 @@ async function googleBooks(
   return (data.items ?? []).map(normalizeGoogleItem).filter((b) => b.title);
 }
 
+async function openLibraryBooks(q: string, author = ""): Promise<BookResult[]> {
+  let url =
+    `https://openlibrary.org/search.json?title=${encodeURIComponent(q)}` +
+    `&limit=10&fields=title,author_name,cover_i,first_publish_year,subject`;
+  if (author.trim()) url += `&author=${encodeURIComponent(author.trim())}`;
+  url += "&language=fre";
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as { docs?: Record<string, unknown>[] };
+  return (data.docs ?? [])
+    .map((doc) => ({
+      title: (doc.title as string) ?? "",
+      authors: (doc.author_name as string[] | undefined) ?? [],
+      cover_url: doc.cover_i
+        ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+        : null,
+      year: doc.first_publish_year ? String(doc.first_publish_year) : null,
+      subjects: ((doc.subject as string[] | undefined) ?? []).slice(0, 5),
+      description: null,
+    }))
+    .filter((b) => b.title);
+}
+
 async function bnfBookFallback(q: string): Promise<BookResult[]> {
-  // SPARQL query against data.bnf.fr to obtain ARK identifiers for cover URLs
   const escaped = q.replace(/["\\]/g, " ").trim();
   const sparql = `
 PREFIX dcterms: <http://purl.org/dc/terms/>
@@ -98,7 +123,9 @@ SELECT DISTINCT ?ark ?title WHERE {
 }
 
 export async function GET(request: Request) {
-  const q = new URL(request.url).searchParams.get("q");
+  const params = new URL(request.url).searchParams;
+  const q = params.get("q");
+  const author = params.get("author") ?? "";
   if (!q?.trim()) return NextResponse.json([]);
 
   const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
@@ -110,20 +137,52 @@ export async function GET(request: Request) {
   }
 
   try {
-    // First pass: French results via intitle:
-    let results = await googleBooks(q, true, apiKey);
+    // Run Google Books (fr) + Open Library in parallel
+    const [frResults, olResults] = await Promise.allSettled([
+      googleBooks(q, author, true, apiKey),
+      openLibraryBooks(q, author),
+    ]);
 
-    // If fewer than 3 hits, broaden to all languages
+    let results = frResults.status === "fulfilled" ? frResults.value : [];
+    const ol = olResults.status === "fulfilled" ? olResults.value : [];
+
+    // If fewer than 3 Google results, broaden to all languages
     if (results.length < 3) {
-      const broader = await googleBooks(q, false, apiKey);
-      const seen = new Set(results.map((r) => r.title.toLowerCase()));
-      for (const b of broader) {
-        if (!seen.has(b.title.toLowerCase())) {
-          results.push(b);
-          seen.add(b.title.toLowerCase());
+      try {
+        const broader = await googleBooks(q, author, false, apiKey);
+        const seen = new Set(results.map((r) => r.title.toLowerCase()));
+        for (const b of broader) {
+          if (!seen.has(b.title.toLowerCase())) {
+            results.push(b);
+            seen.add(b.title.toLowerCase());
+          }
+          if (results.length >= 10) break;
         }
-        if (results.length >= 8) break;
+      } catch {
+        // non-fatal
       }
+    }
+
+    // Augment Google Books results with Open Library covers
+    for (const r of results) {
+      if (!r.cover_url) {
+        const olMatch = ol.find(
+          (o) =>
+            o.cover_url &&
+            o.title.toLowerCase().slice(0, 10) === r.title.toLowerCase().slice(0, 10),
+        );
+        if (olMatch) r.cover_url = olMatch.cover_url;
+      }
+    }
+
+    // Add unique Open Library results (with covers) not already in Google results
+    const seenTitles = new Set(results.map((r) => r.title.toLowerCase().slice(0, 12)));
+    for (const o of ol) {
+      if (o.cover_url && !seenTitles.has(o.title.toLowerCase().slice(0, 12))) {
+        results.push(o);
+        seenTitles.add(o.title.toLowerCase().slice(0, 12));
+      }
+      if (results.length >= 12) break;
     }
 
     // BnF fallback when no result has a cover image
@@ -131,7 +190,6 @@ export async function GET(request: Request) {
       try {
         const bnf = await bnfBookFallback(q);
         for (const bf of bnf) {
-          // Try to attach the BnF cover to a matching Google Books entry
           const match = results.find((r) =>
             r.title.toLowerCase().startsWith(bf.title.toLowerCase().slice(0, 8)),
           );
@@ -142,11 +200,11 @@ export async function GET(request: Request) {
           }
         }
       } catch {
-        // BnF fallback failure is non-fatal — return Google Books results as-is
+        // non-fatal
       }
     }
 
-    // If Google Books found nothing at all, try BnF directly
+    // If Google + OL found nothing, try BnF directly
     if (results.length === 0) {
       try {
         results = await bnfBookFallback(q);
@@ -155,7 +213,7 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json(results.slice(0, 8));
+    return NextResponse.json(results.slice(0, 10));
   } catch {
     return NextResponse.json([]);
   }

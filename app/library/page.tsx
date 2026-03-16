@@ -130,17 +130,26 @@ function BookSearchField({ onSelect }: { onSelect: (book: OLBook) => void }) {
 }
 
 /** Inline cover search for existing books / book drawer */
-function CoverSearchField({ title, onSelect }: { title: string; onSelect: (url: string) => void }) {
+function CoverSearchField({ title, author, onSelect }: { title: string; author?: string; onSelect: (url: string) => void }) {
   const [results, setResults] = useState<OLBook[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [query, setQuery] = useState("");
+
+  // Initialise query when title/author become available
+  useEffect(() => {
+    if (!searched) setQuery([title, author].filter(Boolean).join(" "));
+  }, [title, author, searched]);
 
   async function search() {
-    if (!title.trim()) return;
+    const q = query.trim() || title.trim();
+    if (!q) return;
     setLoading(true); setError(false);
     try {
-      const res = await fetch(`/api/library/search/books?q=${encodeURIComponent(title)}`);
+      let url = `/api/library/search/books?q=${encodeURIComponent(q)}`;
+      if (author?.trim()) url += `&author=${encodeURIComponent(author.trim())}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (Array.isArray(data)) setResults(data.filter((r: OLBook) => r.cover_url));
     } catch { setError(true); }
@@ -149,24 +158,49 @@ function CoverSearchField({ title, onSelect }: { title: string; onSelect: (url: 
 
   if (!searched) {
     return (
-      <button type="button" onClick={search} disabled={loading}
-        style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text-muted)", cursor: "pointer" }}>
-        {loading ? "…" : "🔍 Chercher la couverture"}
-      </button>
+      <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); search(); } }}
+          placeholder="Titre ou titre + auteur…"
+          style={{ fontSize: 11, padding: "3px 7px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text)", outline: "none", width: 180 }}
+        />
+        <button type="button" onClick={search} disabled={loading}
+          style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text-muted)", cursor: "pointer" }}>
+          {loading ? "…" : "🔍 Chercher"}
+        </button>
+      </div>
     );
   }
-  if (error) return <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Recherche indisponible</span>;
-  if (results.length === 0) return <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Aucune couverture trouvée</span>;
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
-      {results.map((r, i) => (
-        <button key={i} type="button" onClick={() => onSelect(r.cover_url!)} title={r.title}
-          style={{ padding: 0, border: "2px solid var(--border)", borderRadius: 4, cursor: "pointer", overflow: "hidden", background: "none" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}>
-          <img src={r.cover_url!} alt={r.title} style={{ width: 38, height: 54, objectFit: "cover", display: "block" }} />
+    <div>
+      <div style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setSearched(false); search(); } }}
+          style={{ fontSize: 11, padding: "3px 7px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text)", outline: "none", width: 180 }}
+        />
+        <button type="button" onClick={() => { setSearched(false); search(); }} disabled={loading}
+          style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--surface2)", border: "1.5px solid var(--border)", color: "var(--text-muted)", cursor: "pointer" }}>
+          {loading ? "…" : "↩"}
         </button>
-      ))}
+      </div>
+      {error && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Recherche indisponible</span>}
+      {!error && results.length === 0 && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Aucune couverture trouvée</span>}
+      {results.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {results.map((r, i) => (
+            <button key={i} type="button" onClick={() => onSelect(r.cover_url!)} title={r.title}
+              style={{ padding: 0, border: "2px solid var(--border)", borderRadius: 4, cursor: "pointer", overflow: "hidden", background: "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}>
+              <img src={r.cover_url!} alt={r.title} style={{ width: 38, height: 54, objectFit: "cover", display: "block" }} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -508,7 +542,7 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate, onRe
               {imageUrl ? <img src={imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : "📚"}
             </div>
           </div>
-          {!imageUrl && <div style={{ marginTop: 6 }}><CoverSearchField title={title} onSelect={(url) => setImageUrl(url)} /></div>}
+          {!imageUrl && <div style={{ marginTop: 6 }}><CoverSearchField title={title} author={authors.find((a) => a.id === authorId)?.name} onSelect={(url) => setImageUrl(url)} /></div>}
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Début">
@@ -848,7 +882,7 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
                 {form.image_url ? <img src={form.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : "📚"}
               </div>
             </div>
-            {!form.image_url && form.title && <div style={{ marginTop: 6 }}><CoverSearchField title={form.title} onSelect={(url) => setForm(f => ({ ...f, image_url: url }))} /></div>}
+            {!form.image_url && form.title && <div style={{ marginTop: 6 }}><CoverSearchField title={form.title} author={authors.find((a) => a.id === form.author_id)?.name} onSelect={(url) => setForm(f => ({ ...f, image_url: url }))} /></div>}
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Début">
