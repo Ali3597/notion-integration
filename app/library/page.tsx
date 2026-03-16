@@ -815,7 +815,11 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Titre, auteur…"
               style={{ ...inputStyle, paddingLeft: 28, width: 180, fontSize: 12 }} />
           </div>
-          <button className="btn-primary" onClick={() => setAddOpen(true)}
+          <button className="btn-primary" onClick={() => {
+            const roman = genres.find(g => g.name === "Roman");
+            setForm(f => ({ ...f, genre_id: roman?.id ?? "" }));
+            setAddOpen(true);
+          }}
             style={{ padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer" }}>
             + Ajouter un livre
           </button>
