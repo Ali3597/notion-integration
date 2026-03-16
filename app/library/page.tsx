@@ -415,6 +415,16 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate, onRe
     if (data.id) { setGenreId(data.id); onRefresh(); }
   }
 
+  async function handleCreateSerie(label: string) {
+    const res = await fetch("/api/library/series", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label.trim(), author_id: null, status: null }),
+    });
+    const data = await res.json();
+    if (data.id) { setSerieId(data.id); onRefresh(); }
+  }
+
   const [notes, setNotes] = useState<DBBookNote[]>([]);
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [newNoteContent, setNewNoteContent] = useState("");
@@ -525,6 +535,8 @@ function BookDrawer({ book, authors, genres, seriesList, onClose, onUpdate, onRe
             value={serieId}
             onChange={setSerieId}
             placeholder="— Aucune —"
+            searchable
+            onCreateOption={handleCreateSerie}
             options={[{ value: "", label: "— Aucune —" }, ...seriesList.map((s) => ({ value: s.id, label: s.name }))]}
           />
         </Field>
@@ -696,6 +708,16 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
     if (data.id) { setForm(f => ({ ...f, genre_id: data.id })); onUpdate(); }
   }
 
+  async function handleCreateSerieInForm(label: string) {
+    const res = await fetch("/api/library/series", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label.trim(), author_id: null, status: null }),
+    });
+    const data = await res.json();
+    if (data.id) { setForm(f => ({ ...f, serie_id: data.id })); onUpdate(); }
+  }
+
   async function handleBookSelect(book: OLBook) {
     setFormDateError(null);
     const updates: Partial<typeof form> = { title: book.title, image_url: book.cover_url ?? "" };
@@ -865,6 +887,8 @@ function TabLibrary({ books, authors, genres, seriesList, onUpdate }: {
               value={form.serie_id}
               onChange={(v) => setForm((f) => ({ ...f, serie_id: v }))}
               placeholder="— Aucune —"
+              searchable
+              onCreateOption={handleCreateSerieInForm}
               options={[{ value: "", label: "— Aucune —" }, ...seriesList.map((s) => ({ value: s.id, label: s.name }))]}
             />
           </Field>
