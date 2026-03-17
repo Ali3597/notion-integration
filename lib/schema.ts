@@ -148,3 +148,12 @@ export const journal_logs = pgTable("journal_logs", {
   review_date: date("review_date"),
   created_at: timestamp("created_at").defaultNow(),
 });
+
+export const birthdays = pgTable("birthdays", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  birth_date: date("birth_date").notNull(),
+  year_known: boolean("year_known").default(true),
+  note: text("note"),
+  created_at: timestamp("created_at").defaultNow(),
+});

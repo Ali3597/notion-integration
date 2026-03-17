@@ -69,8 +69,9 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Guard against React Strict Mode double-invoke of setState updaters
   const timerEndFiredRef = useRef(false);
-  // Track when the timer was paused to exclude pause time from session duration
-  const pausedAtRef = useRef<number | null>(null);
+  // Track pause start and total accumulated pause time to exclude from session duration
+  const pauseStartRef = useRef<number | null>(null);
+  const totalPausedMsRef = useRef<number>(0);
 
   // Load projects once
   useEffect(() => {
@@ -156,7 +157,9 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     handleTimerEndRef.current = () => {
-      pausedAtRef.current = null;
+      const pausedMs = totalPausedMsRef.current;
+      pauseStartRef.current = null;
+      totalPausedMsRef.current = 0;
       setRunning(false);
       playSound();
       const currentMode = modeRef.current;
@@ -165,7 +168,9 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
         const start = sessionStartRef.current;
         const proj = selectedProjectRef.current;
         if (proj && start) {
-          saveSessionRef.current(start, new Date().toISOString());
+          // Shift start forward by total pause time so session duration = pure work time
+          const adjustedStart = new Date(new Date(start).getTime() + pausedMs).toISOString();
+          saveSessionRef.current(adjustedStart, new Date().toISOString());
         }
       }
       setMode((m) => (m === "work" ? "break" : "work"));
@@ -201,26 +206,26 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const handleStart = useCallback(() => {
     if (!selectedProject) return;
     if (mode === "work" && !sessionStart) {
-      // Fresh start
+      // Fresh start — reset accumulated pause time
+      totalPausedMsRef.current = 0;
       setSessionStart(new Date().toISOString());
-    } else if (mode === "work" && sessionStart && pausedAtRef.current !== null) {
-      // Resuming after pause — shift sessionStart forward by the pause duration
-      // so that pause time is excluded from the saved session duration
-      const pauseDuration = Date.now() - pausedAtRef.current;
-      setSessionStart(new Date(new Date(sessionStart).getTime() + pauseDuration).toISOString());
-      pausedAtRef.current = null;
+    } else if (mode === "work" && sessionStart && pauseStartRef.current !== null) {
+      // Resuming after pause — accumulate pause duration (applied at save time)
+      totalPausedMsRef.current += Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
     }
     setRunning(true);
   }, [selectedProject, mode, sessionStart]);
 
   const handlePause = useCallback(() => {
-    pausedAtRef.current = Date.now();
+    pauseStartRef.current = Date.now();
     setRunning(false);
   }, []);
 
   // Annuler — discard, no save
   const handleReset = useCallback(() => {
-    pausedAtRef.current = null;
+    pauseStartRef.current = null;
+    totalPausedMsRef.current = 0;
     setRunning(false);
     setSessionStart(null);
     setSecondsLeft(mode === "work" ? workMin * 60 : breakMin * 60);
@@ -228,7 +233,12 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
 
   // Terminer — save elapsed time
   const handleFinish = useCallback(async () => {
-    pausedAtRef.current = null;
+    const pausedMs = pauseStartRef.current !== null
+      ? totalPausedMsRef.current + (Date.now() - pauseStartRef.current)
+      : totalPausedMsRef.current;
+    pauseStartRef.current = null;
+    totalPausedMsRef.current = 0;
+
     if (!sessionStart || !selectedProject) {
       setRunning(false);
       setSessionStart(null);
@@ -238,14 +248,16 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     setRunning(false);
     setSessionCount((c) => c + 1);
     const endTime = new Date().toISOString();
-    const start = sessionStart;
+    // Shift start forward by total pause time so duration = pure work time
+    const adjustedStart = new Date(new Date(sessionStart).getTime() + pausedMs).toISOString();
     setSessionStart(null);
     setSecondsLeft(mode === "work" ? workMin * 60 : breakMin * 60);
-    await saveSession(start, endTime);
+    await saveSession(adjustedStart, endTime);
   }, [sessionStart, selectedProject, mode, workMin, breakMin, saveSession]);
 
   const handleSkip = useCallback(() => {
-    pausedAtRef.current = null;
+    pauseStartRef.current = null;
+    totalPausedMsRef.current = 0;
     setRunning(false);
     setSessionStart(null);
     const next: Mode = mode === "work" ? "break" : "work";

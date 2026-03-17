@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePomodoroContext, MODES } from "@/lib/pomodoro-context";
 
@@ -45,7 +45,29 @@ type DashboardData = {
   shopping: ShoppingStats;
   journal_review: JournalReviewItem[];
 };
-type CalendarEvent = { title: string; start: string; end: string; allDay: boolean };
+
+export interface UnifiedEvent {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // HH:MM
+  end_date?: string; // YYYY-MM-DD (inclusive)
+  end_time?: string; // HH:MM
+  source: "ical" | "birthday" | "reminder";
+  all_day: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+type SourceKey = "ical" | "birthday" | "reminder";
+
+const SOURCE_CONFIG: Record<SourceKey, { label: string; color: string }> = {
+  ical: { label: "iCloud", color: "#3b7ef8" },
+  birthday: { label: "Anniversaires", color: "#d4697e" },
+  reminder: { label: "Rappels", color: "#f59e0b" },
+};
+
+const DEFAULT_SOURCES: Record<SourceKey, boolean> = { ical: true, birthday: true, reminder: true };
+const SOURCES_STORAGE_KEY = "calendar-sources";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -60,16 +82,15 @@ function formatDateFR(date: Date): string {
   return date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 }
 
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
-function getEventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
-  const dayStart = new Date(day);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(day);
-  dayEnd.setHours(23, 59, 59, 999);
+function getEventsForDay(events: UnifiedEvent[], day: Date): UnifiedEvent[] {
+  const dayStr = toLocalDateStr(day);
   return events.filter((e) => {
-    const start = new Date(e.start);
-    const end = new Date(e.end);
-    return start <= dayEnd && end >= dayStart;
+    const endDate = e.end_date || e.date;
+    return e.date <= dayStr && endDate >= dayStr;
   });
 }
 
@@ -77,7 +98,7 @@ function getEventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
 function getMonthGrid(year: number, month: number): Date[] {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
-  const startDow = firstDay.getDay(); // 0=Sun
+  const startDow = firstDay.getDay();
   const startOffset = startDow === 0 ? 6 : startDow - 1;
   const gridStart = new Date(firstDay);
   gridStart.setDate(firstDay.getDate() - startOffset);
@@ -93,19 +114,6 @@ function getMonthGrid(year: number, month: number): Date[] {
   }
   return days;
 }
-
-function getReminderBadge(due_date: string | null): { label: string; color: string } | null {
-  if (!due_date) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(due_date + "T00:00:00");
-  const diff = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return { label: "En retard", color: "var(--red)" };
-  if (diff === 0) return { label: "Aujourd'hui", color: "var(--accent)" };
-  if (diff === 1) return { label: "Demain", color: "var(--accent2)" };
-  return { label: `Dans ${diff}j`, color: "var(--text-muted)" };
-}
-
 
 // ── Widget wrapper ────────────────────────────────────────────────────────────
 
@@ -169,33 +177,156 @@ function Skeleton({ height = 18 }: { height?: number }) {
 
 const DAY_NAMES_SHORT = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
-function EventChip({ event, compact = false }: { event: CalendarEvent; compact?: boolean }) {
+type EventPopupState = {
+  event: UnifiedEvent;
+  x: number;
+  y: number;
+};
+
+function EventChip({
+  event,
+  compact = false,
+  onClick,
+}: {
+  event: UnifiedEvent;
+  compact?: boolean;
+  onClick?: (e: React.MouseEvent, event: UnifiedEvent) => void;
+}) {
+  const color = SOURCE_CONFIG[event.source]?.color ?? "var(--accent)";
   return (
     <div
       title={event.title}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(e, event); } : undefined}
       style={{
         fontSize: compact ? 9 : 10,
         padding: compact ? "1px 4px" : "2px 5px",
-        background: "var(--accent)",
-        color: "white",
+        background: color + "22",
+        borderLeft: `2px solid ${color}`,
+        color: "var(--text)",
         borderRadius: compact ? 3 : 4,
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
+        cursor: onClick ? "pointer" : "default",
+        display: "flex",
+        alignItems: "center",
+        gap: 3,
       }}
     >
-      {!event.allDay && !compact && (
-        <span style={{ opacity: 0.75, marginRight: 3 }}>
-          {new Date(event.start).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-        </span>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }} />
+      {!event.all_day && !compact && event.time && (
+        <span style={{ opacity: 0.65, marginRight: 1 }}>{event.time}</span>
       )}
-      {event.title}
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{event.title}</span>
     </div>
   );
 }
 
+function EventPopupCard({
+  popup,
+  onClose,
+  onReminderToggle,
+}: {
+  popup: EventPopupState;
+  onClose: () => void;
+  onReminderToggle: (id: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { event, x, y } = popup;
 
-function MonthView({ events, year, month }: { events: CalendarEvent[] | null; year: number; month: number }) {
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  // Position popup: try to keep within viewport
+  const popupW = 240;
+  const left = Math.min(x + 8, window.innerWidth - popupW - 12);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: "fixed",
+        top: y + 8,
+        left,
+        width: popupW,
+        background: "var(--surface)",
+        border: "1.5px solid var(--border)",
+        borderRadius: 10,
+        boxShadow: "var(--shadow-md)",
+        padding: "12px 14px",
+        zIndex: 300,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      {/* Source label */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: SOURCE_CONFIG[event.source].color, flexShrink: 0 }} />
+        <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          {SOURCE_CONFIG[event.source].label}
+        </span>
+      </div>
+
+      {/* Title */}
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.4 }}>
+        {event.title}
+      </div>
+
+      {/* Date / time */}
+      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+        {new Date(event.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+        {event.time && <> · {event.time}{event.end_time ? ` → ${event.end_time}` : ""}</>}
+      </div>
+
+      {/* Reminder toggle */}
+      {event.source === "reminder" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, borderTop: "1px solid var(--border)" }}>
+          <button
+            onClick={() => { onReminderToggle(event.metadata?.id as string); onClose(); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 12, color: "var(--accent)", fontFamily: "var(--font-sans)",
+              padding: 0,
+            }}
+          >
+            ✓ Marquer comme fait
+          </button>
+          <Link href="/reminders" style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: "auto" }}>
+            Voir →
+          </Link>
+        </div>
+      )}
+
+      {/* Birthday link */}
+      {event.source === "birthday" && (
+        <div style={{ paddingTop: 4, borderTop: "1px solid var(--border)" }}>
+          <Link href="/birthdays" style={{ fontSize: 12, color: "var(--accent)" }}>
+            Voir les anniversaires →
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MonthView({
+  events,
+  year,
+  month,
+  onEventClick,
+}: {
+  events: UnifiedEvent[] | null;
+  year: number;
+  month: number;
+  onEventClick: (e: React.MouseEvent, event: UnifiedEvent) => void;
+}) {
   const todayTime = new Date().setHours(0, 0, 0, 0);
   const days = getMonthGrid(year, month);
 
@@ -249,9 +380,11 @@ function MonthView({ events, year, month }: { events: CalendarEvent[] | null; ye
                 </span>
               </div>
               {/* Events */}
-              {events === null ? null : (
+              {events !== null && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                  {dayEvents.slice(0, 2).map((e, j) => <EventChip key={j} event={e} compact />)}
+                  {dayEvents.slice(0, 2).map((e, j) => (
+                    <EventChip key={j} event={e} compact onClick={onEventClick} />
+                  ))}
                   {dayEvents.length > 2 && (
                     <div style={{ fontSize: 9, color: "var(--text-muted)" }}>+{dayEvents.length - 2}</div>
                   )}
@@ -265,14 +398,61 @@ function MonthView({ events, year, month }: { events: CalendarEvent[] | null; ye
   );
 }
 
-function CalendarWidget({ events, error }: { events: CalendarEvent[] | null; error: boolean }) {
+function CalendarWidget({ events, error }: { events: UnifiedEvent[] | null; error: boolean }) {
   const [monthOffset, setMonthOffset] = useState(0);
+  const [sourcesEnabled, setSourcesEnabled] = useState<Record<SourceKey, boolean>>(DEFAULT_SOURCES);
+  const [popup, setPopup] = useState<EventPopupState | null>(null);
+  const [doneReminderIds, setDoneReminderIds] = useState<Set<string>>(new Set());
+
+  // Load source toggles from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(SOURCES_STORAGE_KEY);
+      if (stored) setSourcesEnabled({ ...DEFAULT_SOURCES, ...JSON.parse(stored) });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function toggleSource(key: SourceKey) {
+    setSourcesEnabled((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem(SOURCES_STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
+  const handleEventClick = useCallback((e: React.MouseEvent, event: UnifiedEvent) => {
+    setPopup({ event, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleReminderToggle = useCallback(async (id: string) => {
+    setDoneReminderIds((prev) => new Set([...prev, id]));
+    try {
+      await fetch(`/api/reminders?id=${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: true }),
+      });
+    } catch {
+      setDoneReminderIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    }
+  }, []);
 
   const now = new Date();
   const displayDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
   const displayYear = displayDate.getFullYear();
   const displayMonth = displayDate.getMonth();
   const monthLabel = displayDate.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+
+  // Filter events by enabled sources + done reminders
+  const filteredEvents = events
+    ? events.filter((e) => {
+        if (!sourcesEnabled[e.source]) return false;
+        if (e.source === "reminder" && doneReminderIds.has(e.metadata?.id as string)) return false;
+        return true;
+      })
+    : null;
 
   const headerExtra = (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -295,88 +475,53 @@ function CalendarWidget({ events, error }: { events: CalendarEvent[] | null; err
   );
 
   return (
-    <Widget title="Calendrier" icon="📅" headerExtra={headerExtra}>
-      {error ? (
-        <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Calendrier non disponible</p>
-      ) : (
-        <MonthView events={events} year={displayYear} month={displayMonth} />
+    <>
+      <Widget title="Calendrier" icon="📅" headerExtra={headerExtra}>
+        {/* Source legend */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {(Object.entries(SOURCE_CONFIG) as [SourceKey, { label: string; color: string }][]).map(([key, cfg]) => (
+            <button
+              key={key}
+              onClick={() => toggleSource(key)}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                background: "none", border: "none", cursor: "pointer",
+                padding: "2px 6px", borderRadius: 20,
+                opacity: sourcesEnabled[key] ? 1 : 0.4,
+                outline: "none",
+                fontFamily: "var(--font-sans)",
+              }}
+              title={`${sourcesEnabled[key] ? "Masquer" : "Afficher"} ${cfg.label}`}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500 }}>{cfg.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {error ? (
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Calendrier non disponible</p>
+        ) : (
+          <MonthView
+            events={filteredEvents}
+            year={displayYear}
+            month={displayMonth}
+            onEventClick={handleEventClick}
+          />
+        )}
+      </Widget>
+
+      {popup && (
+        <EventPopupCard
+          popup={popup}
+          onClose={() => setPopup(null)}
+          onReminderToggle={handleReminderToggle}
+        />
       )}
-    </Widget>
+    </>
   );
 }
 
-// ── Reminders widget ──────────────────────────────────────────────────────────
-
-function RemindersWidget({ reminders: initial }: { reminders?: Reminder[] }) {
-  const [reminders, setReminders] = useState<Reminder[]>(initial ?? []);
-  const loading = initial === undefined;
-
-  useEffect(() => {
-    if (initial !== undefined) setReminders(initial);
-  }, [initial]);
-
-  const toggle = async (id: string, done: boolean) => {
-    setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, done } : r)));
-    try {
-      await fetch(`/api/reminders?id=${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ done }),
-      });
-    } catch {
-      setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, done: !done } : r)));
-    }
-  };
-
-  return (
-    <Widget title="Rappels urgents" icon="🔔" action={{ label: "Tout voir →", href: "/reminders" }}>
-      {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Skeleton /><Skeleton /><Skeleton />
-        </div>
-      ) : reminders.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>✅ Aucun rappel cette semaine</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {reminders.map((r) => {
-            const badge = getReminderBadge(r.due_date);
-            return (
-              <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                <button
-                  onClick={() => toggle(r.id, !r.done)}
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: 4,
-                    border: `1.5px solid ${r.done ? "var(--accent)" : "var(--border)"}`,
-                    background: r.done ? "var(--accent)" : "transparent",
-                    flexShrink: 0,
-                    marginTop: 2,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "white",
-                    fontSize: 10,
-                  }}
-                >
-                  {r.done && "✓"}
-                </button>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: "var(--text)", textDecorationLine: r.done ? "line-through" : undefined, opacity: r.done ? 0.5 : 1 }}>
-                    {r.name}
-                  </div>
-                  {badge && (
-                    <span style={{ fontSize: 10, color: badge.color, fontWeight: 600 }}>{badge.label}</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Widget>
-  );
-}
 
 // ── Projects widget ───────────────────────────────────────────────────────────
 
@@ -443,14 +588,13 @@ function ProjectsWidget({ projects }: { projects?: ProjectWithTasks[] }) {
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
 function PomodoroWidget({ pomodoro }: { pomodoro?: PomodoroStats }) {
-  const { running, secondsLeft, mode, selectedProject, projects, todayStats, sessionStart, handlePause, handleStart } = usePomodoroContext();
+  const { running, secondsLeft, mode, selectedProject, projects, todayStats, handlePause, handleStart } = usePomodoroContext();
   const loading = pomodoro === undefined;
 
   const modeConfig = MODES[mode];
   const modeColor = modeConfig.color;
   const projectName = projects.find((p) => p.id === selectedProject)?.name ?? null;
 
-  // Live stats: prefer context (refreshed after each save), fallback to API
   const sessionCount = todayStats?.session_count ?? pomodoro?.session_count ?? 0;
   const totalMinutes = todayStats?.total_minutes ?? pomodoro?.total_minutes ?? 0;
 
@@ -462,7 +606,6 @@ function PomodoroWidget({ pomodoro }: { pomodoro?: PomodoroStats }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Live timer indicator */}
           {selectedProject && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
@@ -491,7 +634,6 @@ function PomodoroWidget({ pomodoro }: { pomodoro?: PomodoroStats }) {
             </div>
           )}
 
-          {/* Stats */}
           <div style={{ display: "flex", gap: 16 }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, color: "var(--accent)" }}>
@@ -710,7 +852,7 @@ function HabitsWidget({ habits: initial }: { habits?: HabitItem[] }) {
           <Skeleton /><Skeleton /><Skeleton />
         </div>
       ) : total === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Aucune habitude prévue aujourd'hui.</p>
+        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Aucune habitude prévue aujourd&apos;hui.</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {/* Progress bar */}
@@ -813,7 +955,7 @@ function JournalWidget({ items }: { items?: JournalReviewItem[] }) {
 
 export default function DashboardWidgets({ userName }: { userName: string }) {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [calendar, setCalendar] = useState<CalendarEvent[] | null>(null);
+  const [calendarEvents, setCalendarEvents] = useState<UnifiedEvent[] | null>(null);
   const [calendarError, setCalendarError] = useState(false);
 
   useEffect(() => {
@@ -822,11 +964,11 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
       .then((d) => { if (!d.error) setDashboard(d); })
       .catch(() => {});
 
-    fetch("/api/calendar")
+    fetch("/api/calendar/unified")
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setCalendarError(true);
-        else setCalendar(d);
+        else setCalendarEvents(d);
       })
       .catch(() => setCalendarError(true));
   }, []);
@@ -851,13 +993,10 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
           gap: 20,
         }}
       >
-        {/* Calendrier — col span 2 */}
-        <div style={{ gridColumn: "span 2" }}>
-          <CalendarWidget events={calendar} error={calendarError} />
+        {/* Calendrier — full width (col span 3) */}
+        <div style={{ gridColumn: "span 3" }}>
+          <CalendarWidget events={calendarEvents} error={calendarError} />
         </div>
-
-        {/* Rappels — col span 1 */}
-        <RemindersWidget reminders={dashboard?.reminders} />
 
         {/* Habitudes — col span 2 */}
         <div style={{ gridColumn: "span 2" }}>
@@ -911,4 +1050,3 @@ const widgetTitleStyle: React.CSSProperties = {
   letterSpacing: "0.08em",
   color: "var(--text-muted)",
 };
-

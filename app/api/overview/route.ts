@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, sessions, meditations, shopping_items, reminders, books, journal_entries } from "@/lib/schema";
+import { projects, tasks, sessions, meditations, shopping_items, reminders, books, journal_entries, birthdays } from "@/lib/schema";
 import { eq, gte, lte, sql, desc } from "drizzle-orm";
 
 export async function GET() {
@@ -17,6 +17,7 @@ export async function GET() {
       reminderStats,
       libraryStats,
       journalReview,
+      allBirthdays,
     ] = await Promise.all([
       db.select({
         total: sql<number>`count(*)`,
@@ -43,6 +44,8 @@ export async function GET() {
       db.select({
         undone: sql<number>`count(*) filter (where done = false)`,
         overdue: sql<number>`count(*) filter (where done = false and due_date < current_date)`,
+        today: sql<number>`count(*) filter (where done = false and due_date = current_date)`,
+        tomorrow: sql<number>`count(*) filter (where done = false and due_date = current_date + 1)`,
       }).from(reminders),
       db.select({
         reading: sql<number>`count(*) filter (where status = 'En cours')`,
@@ -56,19 +59,36 @@ export async function GET() {
       })
         .from(journal_entries)
         .where(sql`exists (select 1 from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null and jl.review_date <= (current_date + interval '7 days')::date)`),
+
+      db.select({ birth_date: birthdays.birth_date }).from(birthdays),
     ]);
 
     const rs = reminderStats[0];
     const ls = libraryStats[0];
+
+    // Count birthdays in next 7 days
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const birthdaysUpcoming = allBirthdays.filter(({ birth_date }) => {
+      const [, monthStr, dayStr] = birth_date.split("-");
+      const m = parseInt(monthStr, 10) - 1;
+      const d = parseInt(dayStr, 10);
+      const thisYear = new Date(today.getFullYear(), m, d);
+      const next = thisYear >= today ? thisYear : new Date(today.getFullYear() + 1, m, d);
+      const diff = Math.round((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return diff >= 0 && diff <= 7;
+    }).length;
+
     return NextResponse.json({
       projects: projectStats[0],
       tasks: taskStats[0],
       today: todaySessionStats[0],
       lastMeditation: lastMeditation[0] ?? null,
       shopping: shoppingStats[0],
-      reminders: { undone: Number(rs.undone), overdue: Number(rs.overdue) },
+      reminders: { undone: Number(rs.undone), overdue: Number(rs.overdue), today: Number(rs.today), tomorrow: Number(rs.tomorrow) },
       library: { reading: Number(ls.reading), read: Number(ls.read) },
       journal_review: journalReview.filter((e) => e.review_date !== null),
+      birthdays_upcoming: birthdaysUpcoming,
     });
   } catch (error) {
     console.error(error);
