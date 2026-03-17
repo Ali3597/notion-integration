@@ -3,6 +3,10 @@ import { db } from "@/lib/db";
 import { habits, habit_logs } from "@/lib/schema";
 import { and, gte, eq } from "drizzle-orm";
 
+function ldate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function isHabitDue(
   habit: { frequency_type: string; frequency_days: string | null },
   date: Date
@@ -31,11 +35,11 @@ export async function GET() {
 
     const cutoff90 = new Date(today);
     cutoff90.setDate(cutoff90.getDate() - 89);
-    const cutoff90Str = cutoff90.toISOString().split("T")[0];
+    const cutoff90Str = ldate(cutoff90);
 
     const cutoff30 = new Date(today);
     cutoff30.setDate(cutoff30.getDate() - 29);
-    const cutoff30Str = cutoff30.toISOString().split("T")[0];
+    const cutoff30Str = ldate(cutoff30);
 
     // Load all active habits
     const allHabits = await db.select().from(habits).where(eq(habits.active, true));
@@ -67,7 +71,7 @@ export async function GET() {
     for (let i = 89; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = ldate(d);
 
       let dueCount = 0;
       let doneCount = 0;
@@ -137,7 +141,7 @@ export async function GET() {
       for (let i = 0; i < 90; i++) {
         const d = new Date(today);
         d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split("T")[0];
+        const dateStr = ldate(d);
         // Skip today if not yet completed
         if (i === 0 && !logSet.has(`${habit.id}:${dateStr}`)) continue;
         if (!isHabitDue(habit, d)) continue;

@@ -19,9 +19,14 @@ export async function GET(request: Request) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    function ldate(d: Date): string {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() - days);
-    const cutoffStr = cutoff.toISOString().split("T")[0];
+    const cutoffStr = ldate(cutoff);
 
     const logs = await db
       .select({ completed_date: habit_logs.completed_date })
@@ -35,7 +40,7 @@ export async function GET(request: Request) {
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = ldate(d);
       const due = isHabitDue(habit, d);
       heatmap.push({ date: dateStr, done: logSet.has(dateStr), due });
     }
@@ -78,13 +83,13 @@ export async function GET(request: Request) {
     for (let i = 29; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = ldate(d);
       // Count consecutive days before this date
       let streak = 0;
       for (let j = i; j < days; j++) {
         const prev = new Date(today);
         prev.setDate(prev.getDate() - j);
-        const prevStr = prev.toISOString().split("T")[0];
+        const prevStr = ldate(prev);
         if (isHabitDue(habit, prev) && logSet.has(prevStr)) streak++;
         else if (isHabitDue(habit, prev)) break;
       }

@@ -3,6 +3,12 @@ import { db } from "@/lib/db";
 import { habits, habit_logs } from "@/lib/schema";
 import { eq, gte } from "drizzle-orm";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function ldate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // ── Business logic ────────────────────────────────────────────────────────────
 
 function getISODay(date: Date): number {
@@ -38,7 +44,7 @@ function computeStreaks(
   const logSet = new Set(logDates);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split("T")[0];
+  const todayStr = ldate(today);
   const createdAt = habit.created_at ? new Date(habit.created_at) : new Date(0);
 
   if (habit.frequency_type === "weekly") {
@@ -60,7 +66,7 @@ function computeStreaks(
       for (let d = 0; d < 7; d++) {
         const day = new Date(weekStart);
         day.setDate(weekStart.getDate() + d);
-        if (logSet.has(day.toISOString().split("T")[0])) count++;
+        if (logSet.has(ldate(day))) count++;
       }
       if (w === 0 && count < target) {
         currentWeekInProgress = true;
@@ -84,7 +90,7 @@ function computeStreaks(
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     if (d < createdAt) break;
-    if (isHabitDue(habit, d)) dueDates.push(d.toISOString().split("T")[0]);
+    if (isHabitDue(habit, d)) dueDates.push(ldate(d));
   }
 
   const todayIsDue = dueDates[0] === todayStr;
@@ -113,7 +119,7 @@ export async function GET() {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split("T")[0];
+    const todayStr = ldate(today);
 
     const activeHabits = await db
       .select()
@@ -125,7 +131,7 @@ export async function GET() {
 
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() - 400);
-    const cutoffStr = cutoff.toISOString().split("T")[0];
+    const cutoffStr = ldate(cutoff);
 
     const allLogs = await db
       .select({ habit_id: habit_logs.habit_id, completed_date: habit_logs.completed_date })
@@ -141,7 +147,7 @@ export async function GET() {
     const weekStart = new Date(today);
     const dow = weekStart.getDay() === 0 ? 6 : weekStart.getDay() - 1;
     weekStart.setDate(weekStart.getDate() - dow);
-    const weekStartStr = weekStart.toISOString().split("T")[0];
+    const weekStartStr = ldate(weekStart);
 
     const result = activeHabits.map((habit) => {
       const logs = logsByHabit.get(habit.id) || [];
@@ -154,7 +160,7 @@ export async function GET() {
       for (let i = 0; i < 30; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() - i);
-        if (isHabitDue(habit, d)) dueDates30.push(d.toISOString().split("T")[0]);
+        if (isHabitDue(habit, d)) dueDates30.push(ldate(d));
       }
       const completedIn30 = dueDates30.filter((d) => logSet.has(d)).length;
       const completion_rate_30d =

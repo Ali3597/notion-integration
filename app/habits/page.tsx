@@ -48,10 +48,12 @@ function isHabitDue(habit: DBHabit, date: Date): boolean {
   }
 }
 
+function ldate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function todayStr(): string {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split("T")[0];
+  return ldate(new Date());
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -522,8 +524,8 @@ function CalendarTab({ habits, onRefreshHabits }: { habits: DBHabitWithStats[]; 
     if (view === "month") {
       const d = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
       return {
-        rangeFrom: d.toISOString().split("T")[0],
-        rangeTo: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0],
+        rangeFrom: ldate(d),
+        rangeTo: ldate(new Date(d.getFullYear(), d.getMonth() + 1, 0)),
         displayYear: d.getFullYear(),
         displayMonth: d.getMonth(),
         weekDays: null as Date[] | null,
@@ -538,8 +540,8 @@ function CalendarTab({ habits, onRefreshHabits }: { habits: DBHabitWithStats[]; 
       const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws); d.setDate(ws.getDate() + i); return d; });
       const fmtShort = (d: Date) => `${d.getDate()} ${MONTH_FR[d.getMonth()].slice(0, 3).toLowerCase()}`;
       return {
-        rangeFrom: ws.toISOString().split("T")[0],
-        rangeTo: we.toISOString().split("T")[0],
+        rangeFrom: ldate(ws),
+        rangeTo: ldate(we),
         displayYear: ws.getFullYear(),
         displayMonth: ws.getMonth(),
         weekDays: days,
@@ -719,7 +721,7 @@ function CalendarTab({ habits, onRefreshHabits }: { habits: DBHabitWithStats[]; 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, overflowX: "auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(7, minmax(120px, 1fr))`, gap: 8, minWidth: 700 }}>
             {weekDays!.map((day) => {
-              const dateStr = day.toISOString().split("T")[0];
+              const dateStr = ldate(day);
               const isFuture = day > today;
               const isToday = dateStr === todayStr();
               const dueHabits = habits.filter((h) => isHabitDue(h as unknown as DBHabit, day));

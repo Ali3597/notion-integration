@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
+import { DatePicker } from "@/components/DatePicker";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,37 @@ function reviewDateStatus(dateStr: string): "future" | "today" | "overdue" {
   return "future";
 }
 
-// ── Main content (needs useSearchParams) ──────────────────────────────────────
+// ── Icon buttons ───────────────────────────────────────────────────────────────
+
+function IconBtn({
+  onClick, title, danger, active, children,
+}: {
+  onClick: () => void;
+  title?: string;
+  danger?: boolean;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const base: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: 32, height: 32, borderRadius: 8, border: "1.5px solid",
+    cursor: "pointer", fontSize: 14, transition: "all 0.15s",
+    fontFamily: "var(--font-sans)",
+    borderColor: hovered && danger ? "var(--red)" : active ? "var(--accent)" : "var(--border)",
+    background: hovered && danger ? "rgba(220,38,38,0.08)" : active ? "rgba(59,126,248,0.1)" : "transparent",
+    color: hovered && danger ? "var(--red)" : active ? "var(--accent)" : "var(--text-muted)",
+  };
+  return (
+    <button style={base} title={title} onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}>
+      {children}
+    </button>
+  );
+}
+
+// ── Main content ───────────────────────────────────────────────────────────────
 
 function JournalContent() {
   useDynamicFavicon("📖");
@@ -85,12 +116,11 @@ function JournalContent() {
 
   // Add log form
   const [newContent, setNewContent] = useState("");
-  const [newReviewDate, setNewReviewDate] = useState("");
+  const [newReviewDate, setNewReviewDate] = useState<string | null>(null);
   const [addingLog, setAddingLog] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
-  const newContentRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Load entries ────────────────────────────────────────────────────────────
 
@@ -102,13 +132,10 @@ function JournalContent() {
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
-  // Handle initial ?entry= param
   useEffect(() => {
     const id = searchParams.get("entry");
     if (id) setSelectedId(id);
   }, [searchParams]);
-
-  // ── Search debounce ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     const t = setTimeout(() => loadEntries(search || undefined), 200);
@@ -126,17 +153,13 @@ function JournalContent() {
       .catch(() => setLoadingLogs(false));
   }, [selectedId]);
 
-  // Scroll to bottom of logs when they load or a new one is added
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs.length]);
 
-  // Focus title input when editing
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();
   }, [editingTitle]);
-
-  // ── Selected entry ──────────────────────────────────────────────────────────
 
   const selectedEntry = entries.find((e) => e.id === selectedId) ?? null;
 
@@ -159,10 +182,7 @@ function JournalContent() {
     const entry = await res.json();
     await loadEntries(search || undefined);
     selectEntry(entry.id);
-    setTimeout(() => {
-      setTitleDraft("Nouveau thread");
-      setEditingTitle(true);
-    }, 50);
+    setTimeout(() => { setTitleDraft("Nouveau thread"); setEditingTitle(true); }, 50);
   };
 
   const saveTitle = async () => {
@@ -180,17 +200,16 @@ function JournalContent() {
 
   const togglePin = async () => {
     if (!selectedEntry) return;
-    const newPinned = !selectedEntry.pinned;
     await fetch(`/api/journal/entries?id=${selectedId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pinned: newPinned }),
+      body: JSON.stringify({ pinned: !selectedEntry.pinned }),
     });
     await loadEntries(search || undefined);
   };
 
   const deleteEntry = async () => {
-    if (!selectedId || !confirm("Supprimer ce thread et tous ses logs ?")) return;
+    if (!selectedId || !confirm(`Supprimer le thread "${selectedEntry?.title}" et tous ses logs ?`)) return;
     await fetch(`/api/journal/entries?id=${selectedId}`, { method: "DELETE" });
     setSelectedId(null);
     router.replace("/journal", { scroll: false });
@@ -209,7 +228,7 @@ function JournalContent() {
       const log = await res.json();
       setLogs((prev) => [...prev, log]);
       setNewContent("");
-      setNewReviewDate("");
+      setNewReviewDate(null);
       await loadEntries(search || undefined);
     }
     setAddingLog(false);
@@ -243,8 +262,6 @@ function JournalContent() {
     await loadEntries(search || undefined);
   };
 
-  // ── Compute review_date from latest log that has one ────────────────────────
-
   const activeReviewDate = (() => {
     for (let i = logs.length - 1; i >= 0; i--) {
       if (logs[i].review_date) return logs[i].review_date;
@@ -257,10 +274,10 @@ function JournalContent() {
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--bg)", fontFamily: "var(--font-sans)" }}>
 
-      {/* ── Left panel ── */}
+      {/* ── Left sidebar ── */}
       <div style={{
-        width: 300,
-        minWidth: 300,
+        width: 280,
+        minWidth: 280,
         borderRight: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",
@@ -269,105 +286,107 @@ function JournalContent() {
       }}>
 
         {/* Header */}
-        <div style={{ padding: "20px 16px 12px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ padding: "18px 14px 12px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+          <div style={{ marginBottom: 10 }}>
             <Link href="/" className="btn-back" style={{ marginBottom: 0 }}>← Accueil</Link>
           </div>
-          <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", margin: "0 0 12px" }}>📖 Journal</h1>
-          <input
-            type="text"
-            placeholder="Rechercher…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "7px 10px",
-              border: "1.5px solid var(--border)",
-              borderRadius: 8,
-              fontSize: 13,
-              background: "var(--bg)",
-              color: "var(--text)",
-              outline: "none",
-              fontFamily: "var(--font-sans)",
-              boxSizing: "border-box",
-            }}
-          />
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 10, letterSpacing: "-0.01em" }}>
+            📖 Journal
+          </div>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Rechercher…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "7px 10px 7px 28px",
+                border: "1.5px solid var(--border)",
+                borderRadius: 8,
+                fontSize: 12,
+                background: "var(--bg)",
+                color: "var(--text)",
+                outline: "none",
+                fontFamily: "var(--font-sans)",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
         </div>
 
         {/* Thread list */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
           {entries.length === 0 && (
-            <div style={{ padding: "24px 16px", color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>
+            <div style={{ padding: "24px 14px", color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>
               {search ? "Aucun résultat" : "Aucun thread"}
             </div>
           )}
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              onClick={() => selectEntry(entry.id)}
-              style={{
-                padding: "10px 14px",
-                cursor: "pointer",
-                borderLeft: entry.id === selectedId ? "3px solid var(--accent)" : "3px solid transparent",
-                background: entry.id === selectedId ? "rgba(59,126,248,0.06)" : "transparent",
-                transition: "background 0.12s",
-              }}
-              onMouseEnter={(e) => {
-                if (entry.id !== selectedId) (e.currentTarget as HTMLDivElement).style.background = "var(--surface2)";
-              }}
-              onMouseLeave={(e) => {
-                if (entry.id !== selectedId) (e.currentTarget as HTMLDivElement).style.background = "transparent";
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
-                {entry.pinned && <span style={{ fontSize: 10, color: "var(--accent)" }}>📌</span>}
-                <span style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "var(--text)",
-                  flex: 1,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}>
-                  {entry.title}
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  {formatRelativeDate(entry.updated_at)}
-                </span>
-                <span style={{ fontSize: 11, color: "var(--text-muted)", opacity: 0.6 }}>·</span>
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  {entry.log_count} log{entry.log_count !== 1 ? "s" : ""}
-                </span>
-                {entry.review_date && (
-                  <>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", opacity: 0.6 }}>·</span>
+          {entries.map((entry) => {
+            const isSelected = entry.id === selectedId;
+            const rdStatus = entry.review_date ? reviewDateStatus(entry.review_date) : null;
+            return (
+              <div
+                key={entry.id}
+                onClick={() => selectEntry(entry.id)}
+                style={{
+                  padding: "10px 14px",
+                  cursor: "pointer",
+                  borderLeft: isSelected ? "3px solid var(--accent)" : "3px solid transparent",
+                  background: isSelected ? "rgba(59,126,248,0.07)" : "transparent",
+                  transition: "background 0.12s",
+                  borderBottom: "1px solid var(--border)",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "var(--surface2)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "transparent";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                  {entry.pinned && <span style={{ fontSize: 9, color: "var(--accent)" }}>📌</span>}
+                  <span style={{
+                    fontSize: 13, fontWeight: 600,
+                    color: isSelected ? "var(--accent)" : "var(--text)",
+                    flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {entry.title}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: entry.last_log_preview ? 4 : 0 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                    {formatRelativeDate(entry.updated_at)}
+                  </span>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", opacity: 0.5 }}>·</span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                    {entry.log_count} log{entry.log_count !== 1 ? "s" : ""}
+                  </span>
+                  {rdStatus && (
                     <span style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: reviewDateStatus(entry.review_date) === "overdue" ? "var(--red)" : "var(--accent)",
+                      marginLeft: "auto",
+                      fontSize: 10, fontWeight: 600,
+                      padding: "1px 6px", borderRadius: 4,
+                      background: rdStatus === "overdue" ? "rgba(239,68,68,0.1)" : "rgba(59,126,248,0.1)",
+                      color: rdStatus === "overdue" ? "var(--red)" : "var(--accent)",
                     }}>
-                      🔁 {entry.review_date}
+                      🔁
                     </span>
-                  </>
+                  )}
+                </div>
+                {entry.last_log_preview && (
+                  <div style={{
+                    fontSize: 11, color: "var(--text-muted)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    lineHeight: 1.4,
+                  }}>
+                    {entry.last_log_preview}
+                  </div>
                 )}
               </div>
-              {entry.last_log_preview && (
-                <div style={{
-                  fontSize: 11,
-                  color: "var(--text-muted)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  lineHeight: 1.4,
-                }}>
-                  {entry.last_log_preview}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* New thread button */}
@@ -376,25 +395,19 @@ function JournalContent() {
             onClick={createEntry}
             style={{
               width: "100%",
-              padding: "9px",
-              border: "1.5px dashed var(--border)",
+              padding: "9px 16px",
+              border: "none",
               borderRadius: 8,
-              background: "transparent",
-              color: "var(--accent)",
+              background: "var(--accent)",
+              color: "#fff",
               fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",
               fontFamily: "var(--font-sans)",
-              transition: "border-color 0.12s, background 0.12s",
+              transition: "opacity 0.12s",
             }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "rgba(59,126,248,0.06)";
-              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)";
-            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
           >
             + Nouveau thread
           </button>
@@ -405,22 +418,21 @@ function JournalContent() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", minWidth: 0 }}>
 
         {!selectedEntry ? (
-          /* Empty state */
           <div style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--text-muted)",
-            gap: 12,
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            color: "var(--text-muted)", gap: 14,
           }}>
-            <span style={{ fontSize: 40, opacity: 0.3 }}>📖</span>
-            <p style={{ fontSize: 14, margin: 0 }}>Sélectionne un thread ou crée-en un nouveau</p>
+            <span style={{ fontSize: 48, opacity: 0.2 }}>📖</span>
+            <p style={{ fontSize: 14, margin: 0, color: "var(--text-muted)" }}>Sélectionne un thread ou crée-en un nouveau</p>
             <button
               onClick={createEntry}
-              className="btn-primary"
-              style={{ marginTop: 4 }}
+              style={{
+                marginTop: 4, padding: "10px 22px",
+                borderRadius: 8, fontSize: 13, fontWeight: 600,
+                background: "var(--accent)", color: "#fff",
+                border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
+              }}
             >
               + Nouveau thread
             </button>
@@ -429,7 +441,7 @@ function JournalContent() {
           <>
             {/* Thread header */}
             <div style={{
-              padding: "20px 28px 16px",
+              padding: "16px 28px",
               borderBottom: "1px solid var(--border)",
               flexShrink: 0,
               background: "var(--surface)",
@@ -443,33 +455,22 @@ function JournalContent() {
                     onBlur={saveTitle}
                     onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") setEditingTitle(false); }}
                     style={{
-                      flex: 1,
-                      fontSize: 20,
-                      fontWeight: 700,
-                      color: "var(--text)",
-                      border: "none",
+                      flex: 1, fontSize: 20, fontWeight: 700,
+                      color: "var(--text)", border: "none",
                       borderBottom: "2px solid var(--accent)",
-                      outline: "none",
-                      background: "transparent",
-                      fontFamily: "var(--font-sans)",
-                      padding: "2px 0",
+                      outline: "none", background: "transparent",
+                      fontFamily: "var(--font-sans)", padding: "2px 0",
                     }}
                   />
                 ) : (
                   <h2
                     onClick={() => { setTitleDraft(selectedEntry.title); setEditingTitle(true); }}
                     style={{
-                      flex: 1,
-                      fontSize: 20,
-                      fontWeight: 700,
-                      color: "var(--text)",
-                      margin: 0,
-                      cursor: "text",
+                      flex: 1, fontSize: 20, fontWeight: 700,
+                      color: "var(--text)", margin: 0, cursor: "text",
                       borderBottom: "2px solid transparent",
                       padding: "2px 0",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                       transition: "border-color 0.15s",
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.borderBottomColor = "var(--border)")}
@@ -479,234 +480,199 @@ function JournalContent() {
                     {selectedEntry.title}
                   </h2>
                 )}
-                <button
-                  onClick={togglePin}
-                  title={selectedEntry.pinned ? "Désépingler" : "Épingler"}
-                  style={{
-                    background: selectedEntry.pinned ? "rgba(59,126,248,0.1)" : "transparent",
-                    border: "1.5px solid var(--border)",
-                    borderRadius: 7,
-                    padding: "4px 8px",
-                    cursor: "pointer",
-                    fontSize: 14,
-                    color: selectedEntry.pinned ? "var(--accent)" : "var(--text-muted)",
-                    transition: "background 0.12s",
-                  }}
-                >
-                  📌
-                </button>
-                <button
-                  onClick={deleteEntry}
-                  title="Supprimer le thread"
-                  style={{
-                    background: "transparent",
-                    border: "1.5px solid var(--border)",
-                    borderRadius: 7,
-                    padding: "4px 8px",
-                    cursor: "pointer",
-                    fontSize: 14,
-                    color: "var(--text-muted)",
-                    transition: "color 0.12s, border-color 0.12s",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.color = "var(--red)";
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--red)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)";
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)";
-                  }}
-                >
-                  🗑
-                </button>
+
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <IconBtn onClick={togglePin} title={selectedEntry.pinned ? "Désépingler" : "Épingler"} active={selectedEntry.pinned}>
+                    📌
+                  </IconBtn>
+                  <IconBtn onClick={deleteEntry} title="Supprimer le thread" danger>
+                    🗑
+                  </IconBtn>
+                </div>
               </div>
 
               {/* Review date banner */}
               {activeReviewDate && (
                 <div style={{
                   marginTop: 10,
-                  padding: "6px 12px",
-                  borderRadius: 7,
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "5px 12px", borderRadius: 20,
+                  fontSize: 12, fontWeight: 500,
                   background: reviewDateStatus(activeReviewDate) === "overdue"
-                    ? "rgba(239,68,68,0.08)"
-                    : "rgba(59,126,248,0.08)",
+                    ? "rgba(239,68,68,0.08)" : "rgba(59,126,248,0.08)",
                   border: `1px solid ${reviewDateStatus(activeReviewDate) === "overdue" ? "rgba(239,68,68,0.2)" : "rgba(59,126,248,0.2)"}`,
-                  fontSize: 12,
                   color: reviewDateStatus(activeReviewDate) === "overdue" ? "var(--red)" : "var(--accent)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
                 }}>
                   🔁 À revoir le <strong>{formatReviewDate(activeReviewDate)}</strong>
-                  {reviewDateStatus(activeReviewDate) === "overdue" && (
-                    <span style={{ fontWeight: 600 }}>· En retard</span>
-                  )}
-                  {reviewDateStatus(activeReviewDate) === "today" && (
-                    <span style={{ fontWeight: 600 }}>· Aujourd'hui</span>
-                  )}
+                  {reviewDateStatus(activeReviewDate) === "overdue" && <span style={{ fontWeight: 700 }}>· En retard</span>}
+                  {reviewDateStatus(activeReviewDate) === "today" && <span style={{ fontWeight: 700 }}>· Aujourd'hui</span>}
                 </div>
               )}
             </div>
 
             {/* Logs feed */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px" }}>
               {loadingLogs && (
                 <div style={{ color: "var(--text-muted)", fontSize: 13 }}>Chargement…</div>
               )}
               {!loadingLogs && logs.length === 0 && (
-                <div style={{ color: "var(--text-muted)", fontSize: 13, textAlign: "center", marginTop: 40 }}>
-                  Aucun log pour l'instant. Ajoute une première mise à jour ci-dessous.
+                <div style={{
+                  color: "var(--text-muted)", fontSize: 13,
+                  textAlign: "center", marginTop: 60,
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                }}>
+                  <span style={{ fontSize: 32, opacity: 0.3 }}>✏️</span>
+                  <span>Aucun log pour l'instant. Ajoute une première mise à jour ci-dessous.</span>
                 </div>
               )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                {logs.map((log) => (
-                  <div key={log.id} style={{ position: "relative" }} className="journal-log-item">
-                    {/* Date header */}
-                    <div style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--text-muted)",
-                      textTransform: "capitalize",
-                      letterSpacing: "0.04em",
-                      marginBottom: 6,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}>
-                      {formatLogDate(log.created_at)}
-                      {log.review_date && (
-                        <span style={{
-                          fontSize: 10,
-                          padding: "1px 6px",
-                          borderRadius: 4,
-                          background: reviewDateStatus(log.review_date) === "overdue" ? "rgba(239,68,68,0.1)" : "rgba(59,126,248,0.1)",
-                          color: reviewDateStatus(log.review_date) === "overdue" ? "var(--red)" : "var(--accent)",
-                          fontWeight: 600,
-                        }}>
-                          🔁 {formatReviewDate(log.review_date)}
-                        </span>
+
+              {/* Timeline */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {logs.map((log, idx) => (
+                  <div key={log.id} style={{ display: "flex", gap: 16, position: "relative" }}>
+                    {/* Timeline line */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, paddingTop: 2 }}>
+                      <div style={{
+                        width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                        background: "var(--accent)", border: "2px solid var(--bg)",
+                        boxShadow: "0 0 0 1.5px var(--accent)",
+                        marginTop: 6,
+                      }} />
+                      {idx < logs.length - 1 && (
+                        <div style={{
+                          width: 1.5, flex: 1, minHeight: 24,
+                          background: "var(--border)", marginTop: 4,
+                        }} />
                       )}
                     </div>
 
                     {/* Content */}
-                    {editingLogId === log.id ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <textarea
-                          value={editLogContent}
-                          onChange={(e) => setEditLogContent(e.target.value)}
-                          autoFocus
-                          rows={4}
+                    <div style={{ flex: 1, paddingBottom: 24 }} className="journal-log-item">
+                      {/* Date */}
+                      <div style={{
+                        fontSize: 11, fontWeight: 600, color: "var(--text-muted)",
+                        textTransform: "capitalize", letterSpacing: "0.04em",
+                        marginBottom: 6, display: "flex", alignItems: "center", gap: 8,
+                      }}>
+                        {formatLogDate(log.created_at)}
+                        {log.review_date && (
+                          <span style={{
+                            fontSize: 10, padding: "1px 7px", borderRadius: 20,
+                            background: reviewDateStatus(log.review_date) === "overdue" ? "rgba(239,68,68,0.1)" : "rgba(59,126,248,0.1)",
+                            color: reviewDateStatus(log.review_date) === "overdue" ? "var(--red)" : "var(--accent)",
+                            fontWeight: 600, border: "1px solid",
+                            borderColor: reviewDateStatus(log.review_date) === "overdue" ? "rgba(239,68,68,0.2)" : "rgba(59,126,248,0.2)",
+                          }}>
+                            🔁 {formatReviewDate(log.review_date)}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Edit mode */}
+                      {editingLogId === log.id ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <textarea
+                            value={editLogContent}
+                            onChange={(e) => setEditLogContent(e.target.value)}
+                            autoFocus
+                            rows={4}
+                            style={{
+                              width: "100%", padding: "10px 12px",
+                              border: "1.5px solid var(--accent)", borderRadius: 8,
+                              fontSize: 13, lineHeight: 1.6,
+                              color: "var(--text)", background: "var(--bg)",
+                              fontFamily: "var(--font-sans)", outline: "none",
+                              resize: "vertical", boxSizing: "border-box",
+                            }}
+                          />
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                              <span>🔁 Revenir le</span>
+                              <DatePicker
+                                value={editLogReviewDate || null}
+                                onChange={(v) => setEditLogReviewDate(v ?? "")}
+                                placeholder="Choisir une date"
+                                clearable
+                              />
+                            </div>
+                            <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                              <button
+                                onClick={() => setEditingLogId(null)}
+                                style={{
+                                  padding: "6px 14px", borderRadius: 7,
+                                  border: "1.5px solid var(--border)",
+                                  background: "transparent", color: "var(--text-muted)",
+                                  cursor: "pointer", fontSize: 12,
+                                  fontFamily: "var(--font-sans)",
+                                }}
+                              >
+                                Annuler
+                              </button>
+                              <button
+                                onClick={saveEditLog}
+                                style={{
+                                  padding: "6px 16px", borderRadius: 7,
+                                  border: "none", background: "var(--accent)",
+                                  color: "#fff", cursor: "pointer",
+                                  fontSize: 12, fontWeight: 600,
+                                  fontFamily: "var(--font-sans)",
+                                }}
+                              >
+                                Enregistrer
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
                           style={{
-                            width: "100%",
-                            padding: "10px 12px",
-                            border: "1.5px solid var(--accent)",
-                            borderRadius: 8,
-                            fontSize: 13,
-                            lineHeight: 1.6,
+                            position: "relative",
+                            padding: "12px 16px",
+                            background: "var(--surface)",
+                            border: "1.5px solid var(--border)",
+                            borderRadius: 10,
+                            fontSize: 13, lineHeight: 1.7,
                             color: "var(--text)",
-                            background: "var(--bg)",
-                            fontFamily: "var(--font-sans)",
-                            outline: "none",
-                            resize: "vertical",
-                            boxSizing: "border-box",
+                            whiteSpace: "pre-wrap", wordBreak: "break-word",
+                            boxShadow: "var(--shadow-sm)",
                           }}
-                        />
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                          <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
-                            🔁 Revenir le
-                            <input
-                              type="date"
-                              value={editLogReviewDate}
-                              onChange={(e) => setEditLogReviewDate(e.target.value)}
+                        >
+                          {log.content}
+                          {/* Hover actions */}
+                          <div className="log-actions" style={{
+                            position: "absolute", top: 8, right: 10,
+                            display: "flex", gap: 4, opacity: 0, transition: "opacity 0.15s",
+                          }}>
+                            <button
+                              onClick={() => startEditLog(log)}
+                              title="Modifier"
                               style={{
-                                border: "1.5px solid var(--border)",
-                                borderRadius: 6,
-                                padding: "3px 7px",
-                                fontSize: 12,
-                                color: "var(--text)",
-                                background: "var(--bg)",
-                                fontFamily: "var(--font-sans)",
-                                outline: "none",
+                                width: 26, height: 26, borderRadius: 6,
+                                border: "1px solid var(--border)",
+                                background: "var(--bg)", fontSize: 12,
+                                cursor: "pointer", color: "var(--text-muted)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
                               }}
-                            />
-                          </label>
-                          <button onClick={saveEditLog} className="btn-primary" style={{ fontSize: 12, padding: "5px 14px" }}>
-                            Enregistrer
-                          </button>
-                          <button
-                            onClick={() => setEditingLogId(null)}
-                            style={{
-                              fontSize: 12,
-                              padding: "5px 12px",
-                              border: "1.5px solid var(--border)",
-                              borderRadius: 6,
-                              background: "transparent",
-                              color: "var(--text-muted)",
-                              cursor: "pointer",
-                              fontFamily: "var(--font-sans)",
-                            }}
-                          >
-                            Annuler
-                          </button>
+                            >
+                              ✎
+                            </button>
+                            <button
+                              onClick={() => deleteLog(log.id)}
+                              title="Supprimer"
+                              style={{
+                                width: 26, height: 26, borderRadius: 6,
+                                border: "1px solid var(--border)",
+                                background: "var(--bg)", fontSize: 12,
+                                cursor: "pointer", color: "var(--red)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          position: "relative",
-                          padding: "10px 14px",
-                          background: "var(--surface)",
-                          border: "1.5px solid var(--border)",
-                          borderRadius: 8,
-                          fontSize: 13,
-                          lineHeight: 1.6,
-                          color: "var(--text)",
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {log.content}
-                        {/* Actions on hover */}
-                        <div className="log-actions" style={{
-                          position: "absolute",
-                          top: 6,
-                          right: 8,
-                          display: "flex",
-                          gap: 4,
-                          opacity: 0,
-                          transition: "opacity 0.15s",
-                        }}>
-                          <button
-                            onClick={() => startEditLog(log)}
-                            title="Modifier"
-                            style={{
-                              width: 24, height: 24, borderRadius: 5,
-                              border: "1px solid var(--border)",
-                              background: "var(--bg)",
-                              fontSize: 11, cursor: "pointer",
-                              color: "var(--text-muted)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }}
-                          >
-                            ✎
-                          </button>
-                          <button
-                            onClick={() => deleteLog(log.id)}
-                            title="Supprimer"
-                            style={{
-                              width: 24, height: 24, borderRadius: 5,
-                              border: "1px solid var(--border)",
-                              background: "var(--bg)",
-                              fontSize: 11, cursor: "pointer",
-                              color: "var(--text-muted)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -715,78 +681,61 @@ function JournalContent() {
 
             {/* Add log form */}
             <div style={{
-              padding: "16px 28px 20px",
+              padding: "16px 32px 20px",
               borderTop: "1px solid var(--border)",
               flexShrink: 0,
               background: "var(--surface)",
             }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                Ajouter une mise à jour
-              </div>
               <textarea
-                ref={newContentRef}
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
-                placeholder="Écris ta mise à jour…"
+                placeholder="Écris ta mise à jour… (Ctrl+Entrée pour soumettre)"
                 rows={3}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addLog();
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addLog(); }}
                 style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  border: "1.5px solid var(--border)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  color: "var(--text)",
-                  background: "var(--bg)",
-                  fontFamily: "var(--font-sans)",
-                  outline: "none",
-                  resize: "none",
-                  boxSizing: "border-box",
+                  width: "100%", padding: "10px 14px",
+                  border: "1.5px solid var(--border)", borderRadius: 10,
+                  fontSize: 13, lineHeight: 1.6,
+                  color: "var(--text)", background: "var(--bg)",
+                  fontFamily: "var(--font-sans)", outline: "none",
+                  resize: "none", boxSizing: "border-box",
                   transition: "border-color 0.12s",
                 }}
                 onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
                 onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
               />
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
-                <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
-                  🔁 Revenir le
-                  <input
-                    type="date"
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                  <span>🔁 Revenir le</span>
+                  <DatePicker
                     value={newReviewDate}
-                    onChange={(e) => setNewReviewDate(e.target.value)}
-                    style={{
-                      border: "1.5px solid var(--border)",
-                      borderRadius: 6,
-                      padding: "4px 8px",
-                      fontSize: 12,
-                      color: "var(--text)",
-                      background: "var(--bg)",
-                      fontFamily: "var(--font-sans)",
-                      outline: "none",
-                    }}
+                    onChange={(v) => setNewReviewDate(v)}
+                    placeholder="Choisir une date"
+                    clearable
                   />
-                </label>
+                </div>
                 <button
                   onClick={addLog}
                   disabled={!newContent.trim() || addingLog}
-                  className="btn-primary"
-                  style={{ marginLeft: "auto", opacity: !newContent.trim() ? 0.5 : 1 }}
+                  style={{
+                    marginLeft: "auto",
+                    padding: "8px 22px", borderRadius: 8,
+                    border: "none", background: "var(--accent)",
+                    color: "#fff", cursor: !newContent.trim() || addingLog ? "not-allowed" : "pointer",
+                    fontSize: 13, fontWeight: 600,
+                    fontFamily: "var(--font-sans)",
+                    opacity: !newContent.trim() || addingLog ? 0.5 : 1,
+                    transition: "opacity 0.12s",
+                  }}
                 >
                   {addingLog ? "Ajout…" : "Ajouter"}
                 </button>
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
-                Ctrl+Entrée pour soumettre
               </div>
             </div>
           </>
         )}
       </div>
 
-      {/* Hover styles injected */}
       <style>{`
         .journal-log-item:hover .log-actions {
           opacity: 1 !important;

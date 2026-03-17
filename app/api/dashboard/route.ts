@@ -16,14 +16,18 @@ import {
 } from "@/lib/schema";
 import { eq, and, gte, lte, desc, asc, sql, inArray } from "drizzle-orm";
 
+function ldate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export async function GET() {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split("T")[0];
+    const todayStr = ldate(today);
 
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const in7DaysStr = in7Days.toISOString().split("T")[0];
+    const in7DaysStr = ldate(in7Days);
 
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 

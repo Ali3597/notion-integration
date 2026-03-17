@@ -683,8 +683,7 @@ function HabitsWidget({ habits: initial }: { habits?: HabitItem[] }) {
   const toggle = async (id: string, currentlyDone: boolean) => {
     setHabits((prev) => prev.map((h) => h.id === id ? { ...h, completed_today: !currentlyDone } : h));
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split("T")[0];
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     try {
       if (currentlyDone) {
         await fetch(`/api/habits/log?habit_id=${id}&date=${todayStr}`, { method: "DELETE" });

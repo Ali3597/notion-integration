@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import type { DBProject } from "@/types";
 import { CustomSelect } from "@/components/CustomSelect";
@@ -503,9 +502,9 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
 export default function ProjectsPage() {
   useDynamicFavicon("📁");
   useEffect(() => { document.title = "Projets — life×hub"; }, []);
-  const router = useRouter();
   const [projects, setProjects] = useState<ProjectDetail[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingProject, setEditingProject] = useState<ProjectDetail | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType] = useState("");
@@ -634,6 +633,8 @@ export default function ProjectsPage() {
       <GlobalStatsSection />
 
       {loading ? <TableSkeleton columns={8} rows={5} /> : (
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
       <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
@@ -721,7 +722,7 @@ export default function ProjectsPage() {
                         <div style={styles.actions}>
                           <button
                             style={styles.btnEdit}
-                            onClick={() => router.push(`/projects/${p.id}`)}
+                            onClick={() => setEditingProject(p)}
                           >✎</button>
                           <button style={styles.btnDelete} onClick={() => handleDelete(p.id)}>✕</button>
                         </div>
@@ -731,6 +732,16 @@ export default function ProjectsPage() {
                 })}
               </tbody>
             </table>
+      </div>
+      </div>
+      {editingProject && (
+        <DetailPanel
+          project={editingProject}
+          allProjects={projects}
+          onClose={() => setEditingProject(null)}
+          onUpdate={() => { setEditingProject(null); load(); }}
+        />
+      )}
       </div>
       )}
     </main>

@@ -6,6 +6,10 @@ import { eq, gte } from "drizzle-orm";
 // GET — 90-day overview grid for all active habits
 // Returns: { habits: [...], dates: string[], grid: { [habit_id]: Set<date> } }
 
+function ldate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export async function GET() {
   try {
     const today = new Date();
@@ -13,8 +17,8 @@ export async function GET() {
 
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() - 89); // 90 days inclusive
-    const cutoffStr = cutoff.toISOString().split("T")[0];
-    const todayStr = today.toISOString().split("T")[0];
+    const cutoffStr = ldate(cutoff);
+    const todayStr = ldate(today);
 
     const activeHabits = await db
       .select()
@@ -32,7 +36,7 @@ export async function GET() {
     for (let i = 89; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      dates.push(d.toISOString().split("T")[0]);
+      dates.push(ldate(d));
     }
 
     // Build log map
