@@ -183,6 +183,12 @@ type EventPopupState = {
   y: number;
 };
 
+type DayPopupState = {
+  day: Date;
+  events: UnifiedEvent[];
+  rect: DOMRect;
+};
+
 function EventChip({
   event,
   compact = false,
@@ -316,16 +322,208 @@ function EventPopupCard({
   );
 }
 
+function DayPopoverCard({
+  popup,
+  onClose,
+  onReminderToggle,
+  doneReminderIds,
+}: {
+  popup: DayPopupState;
+  onClose: () => void;
+  onReminderToggle: (id: string) => void;
+  doneReminderIds: Set<string>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { day, events, rect } = popup;
+
+  // Sort: timed events first (chronological), then all-day
+  const timedEvents = events
+    .filter((e) => !e.all_day && e.time)
+    .sort((a, b) => (a.time! > b.time! ? 1 : -1));
+  const allDayEvents = events.filter((e) => e.all_day || !e.time);
+  const sorted = [...timedEvents, ...allDayEvents];
+
+  // Positioning
+  const popoverW = 280;
+  const margin = 8;
+  let left = rect.left;
+  if (left + popoverW > window.innerWidth - margin) left = Math.max(margin, rect.right - popoverW);
+  if (left < margin) left = margin;
+
+  const estimatedH = Math.min(360, 80 + sorted.length * 44);
+  const openAbove =
+    window.innerHeight - rect.bottom < estimatedH + margin && rect.top > estimatedH + margin;
+
+  const positionStyle: React.CSSProperties = openAbove
+    ? { bottom: window.innerHeight - rect.top + margin }
+    : { top: rect.bottom + margin };
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [onClose]);
+
+  const dateLabel = day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: "fixed",
+        left,
+        width: popoverW,
+        maxHeight: 360,
+        ...positionStyle,
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        boxShadow: "var(--shadow-md)",
+        zIndex: 400,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 14px 8px", borderBottom: "1px solid var(--border)", flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textTransform: "capitalize" }}>
+          {dateLabel}
+        </span>
+        <button
+          onClick={onClose}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: "var(--text-muted)", fontSize: 14, padding: "2px 5px",
+            borderRadius: 4, lineHeight: 1, fontFamily: "var(--font-sans)",
+          }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Events list */}
+      <div style={{ overflowY: "auto", flex: 1, padding: "6px 0" }}>
+        {sorted.length === 0 ? (
+          <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--text-muted)" }}>
+            Aucun événement
+          </div>
+        ) : (
+          sorted.map((event, i) => {
+            const color = SOURCE_CONFIG[event.source]?.color ?? "var(--accent)";
+            const reminderId = event.metadata?.id as string | undefined;
+            const isDone = !!reminderId && doneReminderIds.has(reminderId);
+
+            // Extract age label from birthday title (e.g. "🎂 Alice — 30 ans")
+            const ageMatch = event.source === "birthday" ? event.title.match(/— (\d+ ans)/) : null;
+
+            return (
+              <div
+                key={i}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "7px 14px",
+                  opacity: isDone ? 0.45 : 1,
+                  borderBottom: i < sorted.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+              >
+                {/* Source dot */}
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%", background: color,
+                  flexShrink: 0, marginTop: 4,
+                }} />
+
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {(event.time || ageMatch) && (
+                    <div style={{ display: "flex", gap: 6, marginBottom: 2 }}>
+                      {event.time && (
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                          {event.time}{event.end_time ? ` → ${event.end_time}` : ""}
+                        </span>
+                      )}
+                      {ageMatch && (
+                        <span style={{ fontSize: 11, color, fontWeight: 600 }}>{ageMatch[1]}</span>
+                      )}
+                    </div>
+                  )}
+                  <div style={{
+                    fontSize: 13, color: "var(--text)", lineHeight: 1.35,
+                    wordBreak: "break-word",
+                    textDecoration: isDone ? "line-through" : "none",
+                  }}>
+                    {event.title}
+                  </div>
+                </div>
+
+                {/* Reminder checkbox */}
+                {event.source === "reminder" && !isDone && reminderId && (
+                  <button
+                    onClick={() => onReminderToggle(reminderId)}
+                    title="Marquer comme fait"
+                    style={{
+                      flexShrink: 0, background: "none",
+                      border: "1.5px solid var(--border)", borderRadius: 5,
+                      width: 20, height: 20, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--text-muted)", fontSize: 11, marginTop: 2,
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)";
+                    }}
+                  >
+                    ✓
+                  </button>
+                )}
+
+                {/* Birthday link */}
+                {event.source === "birthday" && (
+                  <Link
+                    href="/birthdays"
+                    onClick={onClose}
+                    style={{ fontSize: 12, color: "var(--accent)", flexShrink: 0, marginTop: 3, textDecoration: "none" }}
+                  >
+                    →
+                  </Link>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MonthView({
   events,
   year,
   month,
   onEventClick,
+  onDayClick,
 }: {
   events: UnifiedEvent[] | null;
   year: number;
   month: number;
   onEventClick: (e: React.MouseEvent, event: UnifiedEvent) => void;
+  onDayClick: (day: Date, dayEvents: UnifiedEvent[], rect: DOMRect) => void;
 }) {
   const todayTime = new Date().setHours(0, 0, 0, 0);
   const days = getMonthGrid(year, month);
@@ -346,9 +544,19 @@ function MonthView({
           const isCurrentMonth = day.getMonth() === month;
           const isToday = new Date(day).setHours(0, 0, 0, 0) === todayTime;
           const dayEvents = events ? getEventsForDay(events, day) : [];
+          const hasDayPopup = dayEvents.length > 0;
+
+          const openDayPopup = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            const cell = (e.currentTarget as HTMLElement).closest("[data-daycell]") as HTMLElement | null;
+            const rect = (cell ?? e.currentTarget as HTMLElement).getBoundingClientRect();
+            onDayClick(day, dayEvents, rect);
+          };
+
           return (
             <div
               key={i}
+              data-daycell="true"
               style={{
                 borderRadius: 6,
                 padding: "4px 5px",
@@ -360,9 +568,10 @@ function MonthView({
                 opacity: isCurrentMonth ? 1 : 0.38,
               }}
             >
-              {/* Day number */}
+              {/* Day number — clickable */}
               <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 3 }}>
                 <span
+                  onClick={hasDayPopup ? openDayPopup : undefined}
                   style={{
                     fontSize: 11,
                     fontWeight: isToday ? 700 : 400,
@@ -374,6 +583,16 @@ function MonthView({
                     borderRadius: "50%",
                     background: isToday ? "var(--accent)" : "transparent",
                     color: isToday ? "white" : "var(--text)",
+                    cursor: hasDayPopup ? "pointer" : "default",
+                    transition: "background 0.12s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (hasDayPopup && !isToday)
+                      (e.currentTarget as HTMLSpanElement).style.background = "var(--surface2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isToday)
+                      (e.currentTarget as HTMLSpanElement).style.background = "transparent";
                   }}
                 >
                   {day.getDate()}
@@ -386,7 +605,30 @@ function MonthView({
                     <EventChip key={j} event={e} compact onClick={onEventClick} />
                   ))}
                   {dayEvents.length > 2 && (
-                    <div style={{ fontSize: 9, color: "var(--text-muted)" }}>+{dayEvents.length - 2}</div>
+                    <button
+                      onClick={openDayPopup}
+                      style={{
+                        background: "var(--surface2)",
+                        color: "var(--accent)",
+                        border: "none",
+                        borderRadius: 4,
+                        fontSize: 9,
+                        padding: "1px 5px",
+                        cursor: "pointer",
+                        fontFamily: "var(--font-sans)",
+                        fontWeight: 600,
+                        lineHeight: 1.5,
+                        textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "var(--border)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "var(--surface2)";
+                      }}
+                    >
+                      +{dayEvents.length - 2}
+                    </button>
                   )}
                 </div>
               )}
@@ -402,6 +644,7 @@ function CalendarWidget({ events, error }: { events: UnifiedEvent[] | null; erro
   const [monthOffset, setMonthOffset] = useState(0);
   const [sourcesEnabled, setSourcesEnabled] = useState<Record<SourceKey, boolean>>(DEFAULT_SOURCES);
   const [popup, setPopup] = useState<EventPopupState | null>(null);
+  const [dayPopup, setDayPopup] = useState<DayPopupState | null>(null);
   const [doneReminderIds, setDoneReminderIds] = useState<Set<string>>(new Set());
 
   // Load source toggles from localStorage on mount
@@ -423,7 +666,13 @@ function CalendarWidget({ events, error }: { events: UnifiedEvent[] | null; erro
   }
 
   const handleEventClick = useCallback((e: React.MouseEvent, event: UnifiedEvent) => {
+    setDayPopup(null);
     setPopup({ event, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleDayClick = useCallback((day: Date, dayEvents: UnifiedEvent[], rect: DOMRect) => {
+    setPopup(null);
+    setDayPopup({ day, events: dayEvents, rect });
   }, []);
 
   const handleReminderToggle = useCallback(async (id: string) => {
@@ -507,6 +756,7 @@ function CalendarWidget({ events, error }: { events: UnifiedEvent[] | null; erro
             year={displayYear}
             month={displayMonth}
             onEventClick={handleEventClick}
+            onDayClick={handleDayClick}
           />
         )}
       </Widget>
@@ -516,6 +766,14 @@ function CalendarWidget({ events, error }: { events: UnifiedEvent[] | null; erro
           popup={popup}
           onClose={() => setPopup(null)}
           onReminderToggle={handleReminderToggle}
+        />
+      )}
+      {dayPopup && (
+        <DayPopoverCard
+          popup={dayPopup}
+          onClose={() => setDayPopup(null)}
+          onReminderToggle={handleReminderToggle}
+          doneReminderIds={doneReminderIds}
         />
       )}
     </>

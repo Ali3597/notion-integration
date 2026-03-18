@@ -136,7 +136,11 @@ export function DatePicker({
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(() => parsed?.y ?? new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => parsed?.m ?? new Date().getMonth() + 1);
-  const [pickerView, setPickerView] = useState<"days" | "months">("days");
+  const [pickerView, setPickerView] = useState<"days" | "months" | "years">("days");
+  const [yearRangeStart, setYearRangeStart] = useState(() => {
+    const y = parsed?.y ?? new Date().getFullYear();
+    return y - (y % 12);
+  });
   const [openUpward, setOpenUpward] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -145,6 +149,11 @@ export function DatePicker({
     setOpen(false);
     setPickerView("days");
   }, []);
+
+  const openYearPicker = () => {
+    setYearRangeStart(viewYear - (viewYear % 12));
+    setPickerView("years");
+  };
 
   const handleOpen = () => {
     if (disabled) return;
@@ -351,12 +360,24 @@ export function DatePicker({
                 })}
               </div>
             </>
-          ) : (
+          ) : pickerView === "months" ? (
             /* Month / Year selector */
             <>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <NavBtn onClick={() => setViewYear((y) => y - 1)}>‹</NavBtn>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{viewYear}</span>
+                <button
+                  type="button"
+                  onClick={openYearPicker}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    fontSize: 13, fontWeight: 700, color: "var(--text)",
+                    padding: "3px 10px", borderRadius: 6, fontFamily: "var(--font-sans)",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--surface2)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
+                >
+                  {viewYear} ▾
+                </button>
                 <NavBtn onClick={() => setViewYear((y) => y + 1)}>›</NavBtn>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
@@ -396,6 +417,54 @@ export function DatePicker({
                       }}
                     >
                       {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            /* Year grid selector */
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <NavBtn onClick={() => setYearRangeStart((s) => s - 12)}>‹</NavBtn>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>
+                  {yearRangeStart} – {yearRangeStart + 11}
+                </span>
+                <NavBtn onClick={() => setYearRangeStart((s) => s + 12)}>›</NavBtn>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
+                {Array.from({ length: 12 }, (_, i) => yearRangeStart + i).map((y) => {
+                  const isSelected = y === viewYear;
+                  const isCurrent = y === new Date().getFullYear();
+                  return (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => { setViewYear(y); setPickerView("months"); }}
+                      style={{
+                        padding: "8px 4px",
+                        fontSize: 12,
+                        fontFamily: "var(--font-sans)",
+                        borderRadius: 8,
+                        border: isCurrent && !isSelected
+                          ? "1.5px solid var(--accent)"
+                          : "1.5px solid transparent",
+                        background: isSelected ? "var(--accent)" : "transparent",
+                        color: isSelected ? "#fff" : isCurrent ? "var(--accent)" : "var(--text)",
+                        cursor: "pointer",
+                        fontWeight: isSelected || isCurrent ? 600 : 400,
+                        transition: "background 0.1s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected)
+                          (e.currentTarget as HTMLButtonElement).style.background = "var(--surface2)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background =
+                          isSelected ? "var(--accent)" : "transparent";
+                      }}
+                    >
+                      {y}
                     </button>
                   );
                 })}
