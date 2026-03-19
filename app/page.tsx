@@ -31,6 +31,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/petitbambou", icon: "🧘", label: "Petit Bambou" },
       { href: "/shopping", icon: "🛒", label: "Shopping" },
       { href: "/birthdays", icon: "🎂", label: "Anniversaires" },
+      { href: "/weight", icon: "⚖️", label: "Poids" },
     ],
   },
   {

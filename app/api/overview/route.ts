@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, sessions, meditations, shopping_items, reminders, books, journal_entries, birthdays } from "@/lib/schema";
-import { eq, gte, lte, sql, desc } from "drizzle-orm";
+import { projects, tasks, sessions, meditations, shopping_items, reminders, books, journal_entries, birthdays, weight_entries } from "@/lib/schema";
+import { gte, sql, desc } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -18,6 +18,8 @@ export async function GET() {
       libraryStats,
       journalReview,
       allBirthdays,
+      lastWeightRows,
+      weekAgoWeightRows,
     ] = await Promise.all([
       db.select({
         total: sql<number>`count(*)`,
@@ -61,6 +63,19 @@ export async function GET() {
         .where(sql`exists (select 1 from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null and jl.review_date <= (current_date + interval '7 days')::date)`),
 
       db.select({ birth_date: birthdays.birth_date }).from(birthdays),
+
+      // Last weight measurement
+      db.select({ weight: weight_entries.weight, measured_at: weight_entries.measured_at })
+        .from(weight_entries)
+        .orderBy(desc(weight_entries.measured_at))
+        .limit(1),
+
+      // Weight ~7 days ago (between 14d and 5d ago for best match)
+      db.select({ weight: weight_entries.weight, measured_at: weight_entries.measured_at })
+        .from(weight_entries)
+        .where(sql`measured_at < now() - interval '5 days' and measured_at >= now() - interval '14 days'`)
+        .orderBy(desc(weight_entries.measured_at))
+        .limit(1),
     ]);
 
     const rs = reminderStats[0];
@@ -79,6 +94,12 @@ export async function GET() {
       return diff >= 0 && diff <= 7;
     }).length;
 
+    const lastWeight = lastWeightRows[0] ?? null;
+    const weekAgoWeight = weekAgoWeightRows[0] ?? null;
+    const weightVariation = lastWeight && weekAgoWeight
+      ? parseFloat(lastWeight.weight!) - parseFloat(weekAgoWeight.weight!)
+      : null;
+
     return NextResponse.json({
       projects: projectStats[0],
       tasks: taskStats[0],
@@ -89,6 +110,13 @@ export async function GET() {
       library: { reading: Number(ls.reading), read: Number(ls.read) },
       journal_review: journalReview.filter((e) => e.review_date !== null),
       birthdays_upcoming: birthdaysUpcoming,
+      health: lastWeight
+        ? {
+            weight: parseFloat(lastWeight.weight!),
+            measured_at: lastWeight.measured_at,
+            variation_7d: weightVariation !== null ? Math.round(weightVariation * 10) / 10 : null,
+          }
+        : null,
     });
   } catch (error) {
     console.error(error);

@@ -157,3 +157,11 @@ export const birthdays = pgTable("birthdays", {
   note: text("note"),
   created_at: timestamp("created_at").defaultNow(),
 });
+
+export const weight_entries = pgTable("weight_entries", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  measured_at: timestamp("measured_at").notNull().unique(),
+  weight: numeric("weight").notNull(),
+  source: text("source").default("apple_health"),
+  created_at: timestamp("created_at").defaultNow(),
+});
