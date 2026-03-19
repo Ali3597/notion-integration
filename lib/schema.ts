@@ -19,16 +19,6 @@ export const tasks = pgTable("tasks", {
   created_at: timestamp("created_at").defaultNow(),
 });
 
-export const sessions = pgTable("sessions", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name"),
-  project_id: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
-  start_time: timestamp("start_time"),
-  end_time: timestamp("end_time"),
-  notes: text("notes"),
-  created_at: timestamp("created_at").defaultNow(),
-});
-
 export const meditations = pgTable("meditations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   lesson: text("lesson"),

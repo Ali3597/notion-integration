@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import {
   projects,
   tasks,
-  sessions,
   meditations,
   books,
   authors,
@@ -14,7 +13,7 @@ import {
   journal_entries,
   journal_logs,
 } from "@/lib/schema";
-import { eq, and, gte, lte, desc, asc, sql, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, asc, desc, sql, inArray } from "drizzle-orm";
 
 function ldate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -34,8 +33,6 @@ export async function GET() {
     const [
       urgentReminders,
       activeProjectsList,
-      todayStats,
-      lastSessionRow,
       lastMeditationRow,
       monthMedRow,
       readingBooks,
@@ -57,24 +54,6 @@ export async function GET() {
         .select({ id: projects.id, name: projects.name })
         .from(projects)
         .where(eq(projects.status, "En cours")),
-
-      // Today pomodoro stats
-      db
-        .select({
-          session_count: sql<number>`count(*)`,
-          total_minutes: sql<number>`coalesce(round(sum(extract(epoch from (end_time - start_time)) / 60)), 0)`,
-        })
-        .from(sessions)
-        .where(gte(sessions.start_time, today)),
-
-      // Last project worked on today
-      db
-        .select({ project_name: projects.name })
-        .from(sessions)
-        .leftJoin(projects, eq(sessions.project_id, projects.id))
-        .where(gte(sessions.start_time, today))
-        .orderBy(desc(sessions.start_time))
-        .limit(1),
 
       // Last meditation
       db
@@ -208,11 +187,6 @@ export async function GET() {
       reminders: urgentReminders,
       projects: projectsWithTasks,
       habits: habitsWidget,
-      pomodoro: {
-        session_count: Number(todayStats[0]?.session_count ?? 0),
-        total_minutes: Number(todayStats[0]?.total_minutes ?? 0),
-        last_project: lastSessionRow[0] ?? null,
-      },
       meditation: {
         streak: lastMeditationRow[0]?.streak ?? 0,
         last_session: lastMeditationRow[0] ?? null,

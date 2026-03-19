@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Providers } from "./providers";
-import { PomodoroWidget } from "./pomodoro-widget";
 
 export const metadata: Metadata = {
   title: {
@@ -15,10 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <body suppressHydrationWarning>
-        <Providers>
-          {children}
-          <PomodoroWidget />
-        </Providers>
+        {children}
       </body>
     </html>
   );

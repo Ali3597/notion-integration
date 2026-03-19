@@ -57,8 +57,8 @@ export default function TasksPage() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      fetch("/api/pomodoro/tasks").then((r) => r.json()),
-      fetch("/api/pomodoro/projects").then((r) => r.json()),
+      fetch("/api/tasks").then((r) => r.json()),
+      fetch("/api/projects").then((r) => r.json()),
     ])
       .then(([t, p]) => {
         setTasks(Array.isArray(t) ? t : []);
@@ -92,7 +92,7 @@ export default function TasksPage() {
   async function handleToggleDone(t: DBTask) {
     setTogglingId(t.id);
     const newStatus = t.status === "Terminé" ? "Non commencé" : "Terminé";
-    await fetch(`/api/pomodoro/tasks?id=${t.id}`, {
+    await fetch(`/api/tasks?id=${t.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
@@ -105,7 +105,7 @@ export default function TasksPage() {
     e.preventDefault();
     if (!newName.trim() || !newProjectId) return;
     setSaving(true);
-    await fetch("/api/pomodoro/tasks", {
+    await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName.trim(), status: newStatus, project_id: newProjectId || null }),
@@ -117,7 +117,7 @@ export default function TasksPage() {
   }
 
   async function handleSaveEdit(id: string) {
-    await fetch(`/api/pomodoro/tasks?id=${id}`, {
+    await fetch(`/api/tasks?id=${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editValues),
@@ -128,7 +128,7 @@ export default function TasksPage() {
 
   async function handleDelete(id: string) {
     if (!confirm("Supprimer cette tâche ?")) return;
-    await fetch(`/api/pomodoro/tasks?id=${id}`, { method: "DELETE" });
+    await fetch(`/api/tasks?id=${id}`, { method: "DELETE" });
     load();
   }
 

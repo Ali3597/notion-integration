@@ -13,7 +13,6 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
@@ -23,7 +22,7 @@ const TYPE_OPTIONS = ["Perso", "Pro", "Apprentissage", "Side project"];
 
 type ProjectDetail = DBProject & {
   parents: { id: string; name: string }[];
-  children: { id: string; name: string; own_minutes: number }[];
+  children: { id: string; name: string }[];
 };
 
 type TaskSummary = {
@@ -31,14 +30,6 @@ type TaskSummary = {
   name: string;
   status: string | null;
 };
-
-function formatMinutes(min: number) {
-  if (!min || min === 0) return "—";
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  if (h === 0) return `${m}min`;
-  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
-}
 
 function statusColor(status: string | null) {
   if (status === "En cours") return "rgba(59,126,248,0.12)";
@@ -63,7 +54,6 @@ function ParentMultiSelect({ value, onChange, projects, excludeIds }: {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Only root projects (no parents) can be parents, and not excluded ones
   const available = projects.filter(p =>
     !excludeIds.includes(p.id) && p.parents.length === 0
   );
@@ -111,36 +101,19 @@ type GlobalStats = {
     total_tasks: number;
     completed_tasks: number;
     completion_pct: number;
-    total_minutes: number;
-    total_sessions: number;
   };
-  byProject: { id: string; name: string; status: string | null; minutes: number; sessions: number }[];
-  heatmap: { date: string; count: number; minutes: number }[];
-  monthly: { month: string; sessions: number; minutes: number }[];
+  tasksByWeek: { week: string; created: number; completed: number }[];
+  heatmap: { date: string; count: number }[];
 };
 
-function fmtMin(min: number) {
-  if (!min || min === 0) return "—";
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  if (h === 0) return `${m}min`;
-  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
-}
-
-function fmtMonthLabel(ym: string) {
-  const [y, m] = ym.split("-");
-  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
-}
-
-function HeatmapCell({ minutes, date }: { minutes: number; date: string }) {
+function HeatmapCell({ count, date }: { count: number; date: string }) {
   let bg = "var(--border)";
-  if (minutes > 0 && minutes < 30) bg = "rgba(59,126,248,0.2)";
-  else if (minutes >= 30 && minutes < 60) bg = "rgba(59,126,248,0.45)";
-  else if (minutes >= 60 && minutes < 120) bg = "rgba(59,126,248,0.7)";
-  else if (minutes >= 120) bg = "var(--accent)";
+  if (count === 1) bg = "rgba(22,163,74,0.25)";
+  else if (count === 2) bg = "rgba(22,163,74,0.5)";
+  else if (count >= 3) bg = "rgba(22,163,74,0.8)";
   return (
     <div
-      title={`${date}: ${fmtMin(minutes)}`}
+      title={`${date}: ${count} tâche${count !== 1 ? "s" : ""} terminée${count !== 1 ? "s" : ""}`}
       style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: bg, flexShrink: 0, cursor: "default" }}
     />
   );
@@ -156,7 +129,7 @@ function GlobalStatsSection() {
     if (!open) return;
     setLoading(true);
     setError(null);
-    fetch("/api/pomodoro/projects/global-stats")
+    fetch("/api/projects/global-stats")
       .then((r) => r.json())
       .then((d) => {
         if (d && d.kpis) {
@@ -183,25 +156,22 @@ function GlobalStatsSection() {
     return `${y}-${m}-${day}`;
   }
 
-  // Build 90-day heatmap grid (13 weeks × 7 days)
   function buildHeatmapGrid(heatmap: GlobalStats["heatmap"]) {
-    const map = new Map(heatmap.map((r) => [r.date, r.minutes]));
+    const map = new Map(heatmap.map((r) => [r.date, r.count]));
     const today = new Date();
-    // start from 90 days ago, aligned to Monday
     const start = new Date(today);
     start.setDate(today.getDate() - 89);
-    const day0 = start.getDay(); // 0=Sun
+    const day0 = start.getDay();
     const mondayPad = day0 === 0 ? 6 : day0 - 1;
     start.setDate(start.getDate() - mondayPad);
 
-    const cells: { date: string; minutes: number; future: boolean }[] = [];
+    const cells: { date: string; count: number; future: boolean }[] = [];
     for (let i = 0; i < 13 * 7; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = localDateStr(d);
-      cells.push({ date: key, minutes: map.get(key) ?? 0, future: d > today });
+      cells.push({ date: key, count: map.get(key) ?? 0, future: d > today });
     }
-    // Split into weeks (columns)
     const weeks: typeof cells[] = [];
     for (let w = 0; w < 13; w++) weeks.push(cells.slice(w * 7, w * 7 + 7));
     return weeks;
@@ -218,14 +188,14 @@ function GlobalStatsSection() {
           color: "var(--text-muted)",
         }}
       >
-        <span>Vue d'ensemble</span>
+        <span>Vue d&apos;ensemble</span>
         <span style={{ fontSize: 9, opacity: 0.6 }}>{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
         <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 16, borderTop: "1px solid var(--border)" }}>
           {loading ? (
-            <div style={{ paddingTop: 16 }}><StatsSkeleton kpiCount={5} /></div>
+            <div style={{ paddingTop: 16 }}><StatsSkeleton kpiCount={3} /></div>
           ) : error ? (
             <div style={{ padding: "24px 0", textAlign: "center", color: "var(--red)", fontSize: 12 }}>
               {error}
@@ -233,13 +203,11 @@ function GlobalStatsSection() {
           ) : stats && stats.kpis ? (
             <>
               {/* KPI row */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, paddingTop: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, paddingTop: 16 }}>
                 {[
                   { label: "Projets actifs", value: String(stats.kpis.active_projects), sub: `/ ${stats.kpis.total_projects} total` },
                   { label: "Tâches", value: String(stats.kpis.total_tasks), sub: `${stats.kpis.completed_tasks} terminées` },
                   { label: "Complétion", value: `${stats.kpis.completion_pct}%`, sub: "tâches terminées" },
-                  { label: "Temps total", value: fmtMin(stats.kpis.total_minutes), sub: `${stats.kpis.total_sessions} sessions` },
-                  { label: "Moy./session", value: stats.kpis.total_sessions > 0 ? fmtMin(Math.round(stats.kpis.total_minutes / stats.kpis.total_sessions)) : "—", sub: "par session" },
                 ].map((c) => (
                   <div key={c.label} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
                     <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}>{c.label}</div>
@@ -249,61 +217,26 @@ function GlobalStatsSection() {
                 ))}
               </div>
 
-              {/* Charts row */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-
-                {/* Top projets par temps */}
-                <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
-                    Temps par projet
-                  </div>
-                  {stats.byProject.filter((p) => p.minutes > 0).length === 0 ? (
-                    <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>Aucune session</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={140}>
-                      <BarChart
-                        layout="vertical"
-                        data={stats.byProject.filter((p) => p.minutes > 0).slice(0, 8).map((p) => ({ name: p.name.length > 18 ? p.name.slice(0, 17) + "…" : p.name, minutes: p.minutes }))}
-                        barSize={12}
-                        margin={{ left: 4, right: 8 }}
-                      >
-                        <XAxis type="number" hide />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "var(--text)" }} axisLine={false} tickLine={false} width={110} />
-                        <Tooltip formatter={(v: number) => [fmtMin(v), "Temps"]} {...tooltipStyle} />
-                        <Bar dataKey="minutes" radius={[0, 4, 4, 0]}>
-                          {stats.byProject.filter((p) => p.minutes > 0).slice(0, 8).map((_, i) => (
-                            <Cell key={i} fill={i === 0 ? "var(--accent)" : `rgba(59,126,248,${0.6 - i * 0.06})`} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-
-                {/* Activité mensuelle */}
-                <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
-                    Activité mensuelle
-                  </div>
-                  {stats.monthly.length === 0 ? (
-                    <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>Aucune session</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={140}>
-                      <BarChart data={stats.monthly.map((r) => ({ ...r, month: fmtMonthLabel(r.month) }))} barSize={20}>
-                        <XAxis dataKey="month" tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                        <YAxis hide />
-                        <Tooltip formatter={(v: number, name: string) => name === "minutes" ? [fmtMin(v), "Temps"] : [v, "Sessions"]} {...tooltipStyle} />
-                        <Bar dataKey="minutes" name="minutes" fill="rgba(59,126,248,0.5)" radius={[3, 3, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </div>
-
-              {/* Heatmap */}
+              {/* Tasks / semaine chart */}
               <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
-                  Activité (90 jours)
+                  Tâches / semaine (8 sem.)
+                </div>
+                <ResponsiveContainer width="100%" height={140}>
+                  <BarChart data={stats.tasksByWeek} barSize={14} barGap={2}>
+                    <XAxis dataKey="week" tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                    <YAxis hide allowDecimals={false} />
+                    <Tooltip {...tooltipStyle} />
+                    <Bar dataKey="created" name="Créées" fill="rgba(136,136,170,0.35)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="completed" name="Terminées" fill="rgba(22,163,74,0.6)" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Heatmap tâches */}
+              <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
+                  Tâches terminées (90 jours)
                 </div>
                 <div style={{ display: "flex", gap: 3, overflowX: "auto" }}>
                   {buildHeatmapGrid(stats.heatmap).map((week, wi) => (
@@ -312,7 +245,7 @@ function GlobalStatsSection() {
                         cell.future ? (
                           <div key={di} style={{ width: 12, height: 12, flexShrink: 0 }} />
                         ) : (
-                          <HeatmapCell key={di} date={cell.date} minutes={cell.minutes} />
+                          <HeatmapCell key={di} date={cell.date} count={cell.count} />
                         )
                       )}
                     </div>
@@ -320,7 +253,7 @@ function GlobalStatsSection() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 10, color: "var(--text-muted)" }}>
                   <span>Moins</span>
-                  {["var(--border)", "rgba(59,126,248,0.2)", "rgba(59,126,248,0.45)", "rgba(59,126,248,0.7)", "var(--accent)"].map((bg, i) => (
+                  {["var(--border)", "rgba(22,163,74,0.25)", "rgba(22,163,74,0.5)", "rgba(22,163,74,0.8)"].map((bg, i) => (
                     <div key={i} style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: bg }} />
                   ))}
                   <span>Plus</span>
@@ -354,7 +287,7 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
     setStatus(project.status ?? "En cours");
     setType(project.type ?? "");
     setParentIds(project.parents.map(p => p.id));
-    fetch(`/api/pomodoro/tasks?projectId=${project.id}&all=true`)
+    fetch(`/api/tasks?projectId=${project.id}&all=true`)
       .then(r => r.json())
       .then(data => setProjectTasks(Array.isArray(data) ? data : []))
       .catch(() => {});
@@ -369,7 +302,7 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
 
   async function handleSave() {
     setSaving(true);
-    const res = await fetch(`/api/pomodoro/projects?id=${project.id}`, {
+    const res = await fetch(`/api/projects?id=${project.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, status, type: type || null, parent_ids: hasChildren ? undefined : parentIds }),
@@ -428,9 +361,6 @@ function DetailPanel({ project, allProjects, onClose, onUpdate }: {
               {project.children.map(c => (
                 <div key={c.id} style={dp.childRow}>
                   <span style={{ fontSize: 12 }}>▹ {c.name}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
-                    {formatMinutes(c.own_minutes)}
-                  </span>
                 </div>
               ))}
             </div>
@@ -518,7 +448,7 @@ export default function ProjectsPage() {
 
   const load = () => {
     setLoading(true);
-    fetch("/api/pomodoro/projects")
+    fetch("/api/projects")
       .then(r => r.json())
       .then(data => {
         setProjects(Array.isArray(data) ? data : []);
@@ -529,7 +459,6 @@ export default function ProjectsPage() {
 
   useEffect(() => { load(); }, []);
 
-  // Build display rows: root projects first, then their children when expanded
   const roots = projects.filter(p => p.parents.length === 0);
   type DisplayRow = { project: ProjectDetail; indent: boolean; parentId?: string };
   const displayRows: DisplayRow[] = [];
@@ -548,7 +477,6 @@ export default function ProjectsPage() {
       }
     }
   }
-  // Edge case: projects not yet shown
   for (const p of projects) {
     if (!addedIds.has(p.id)) displayRows.push({ project: p, indent: false });
   }
@@ -563,7 +491,7 @@ export default function ProjectsPage() {
     e.preventDefault();
     if (!newName.trim()) return;
     setSaving(true);
-    const res = await fetch("/api/pomodoro/projects", {
+    const res = await fetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName.trim(), status: newStatus, type: newType || null, parent_ids: newParentIds }),
@@ -577,7 +505,7 @@ export default function ProjectsPage() {
 
   async function handleDelete(id: string) {
     if (!confirm("Supprimer ce projet ? Les tâches associées seront dissociées.")) return;
-    await fetch(`/api/pomodoro/projects?id=${id}`, { method: "DELETE" });
+    await fetch(`/api/projects?id=${id}`, { method: "DELETE" });
     load();
   }
 
@@ -590,7 +518,7 @@ export default function ProjectsPage() {
     });
   }
 
-  const COL_COUNT = 8;
+  const COL_COUNT = 6;
 
   return (
     <main style={styles.main}>
@@ -632,7 +560,7 @@ export default function ProjectsPage() {
 
       <GlobalStatsSection />
 
-      {loading ? <TableSkeleton columns={8} rows={5} /> : (
+      {loading ? <TableSkeleton columns={6} rows={5} /> : (
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
       <div style={styles.tableWrapper}>
@@ -648,8 +576,6 @@ export default function ProjectsPage() {
                     value={filterType} onChange={setFilterType} thStyle={styles.th} />
                   <th style={styles.th}>Parents</th>
                   <th style={{ ...styles.th, textAlign: "right" }}>Tâches</th>
-                  <th style={{ ...styles.th, textAlign: "right" }}>Sessions</th>
-                  <th style={{ ...styles.th, textAlign: "right" }}>Temps total</th>
                   <th style={styles.th}></th>
                 </tr>
               </thead>
@@ -659,10 +585,6 @@ export default function ProjectsPage() {
                 ) : filteredRows.map(({ project: p, indent, parentId }) => {
                   const hasChildren = p.children.length > 0;
                   const isExpanded = expanded.has(p.id);
-                  const totalMin = Number(p.total_minutes ?? 0);
-                  const tooltipParts = hasChildren && totalMin > 0
-                    ? [`Direct: ${formatMinutes(p.own_minutes ?? 0)}`, ...p.children.map(c => `${c.name}: ${formatMinutes(c.own_minutes)}`)]
-                    : [];
 
                   return (
                     <tr
@@ -700,23 +622,8 @@ export default function ProjectsPage() {
                         ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                       </td>
                       <td style={{ ...styles.td, textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                        {p.task_count ?? 0}
-                      </td>
-                      <td style={{ ...styles.td, textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                        {p.session_count ?? 0}
-                      </td>
-                      <td
-                        style={{
-                          ...styles.td,
-                          textAlign: "right",
-                          fontFamily: "var(--font-mono)",
-                          fontWeight: totalMin > 0 ? 700 : 400,
-                          color: totalMin > 0 ? "var(--accent)" : "var(--text-muted)",
-                          cursor: tooltipParts.length > 0 ? "help" : "default",
-                        }}
-                        title={tooltipParts.join("\n") || undefined}
-                      >
-                        {formatMinutes(totalMin)}
+                        <span style={{ color: "var(--green)", fontWeight: 600 }}>{p.completed_tasks ?? 0}</span>
+                        <span style={{ color: "var(--text-muted)" }}>/{p.task_count ?? 0}</span>
                       </td>
                       <td style={styles.td}>
                         <div style={styles.actions}>
@@ -796,11 +703,6 @@ const dp: Record<string, React.CSSProperties> = {
     background: "var(--bg)", border: "1.5px solid var(--border)",
     borderRadius: 8, color: "var(--text)", fontFamily: "var(--font-sans)",
   },
-  select: {
-    fontSize: 13, padding: "8px 12px",
-    background: "var(--bg)", border: "1.5px solid var(--border)",
-    borderRadius: 8, color: "var(--text)",
-  },
   childRow: {
     display: "flex", justifyContent: "space-between", alignItems: "center",
     padding: "6px 10px", background: "var(--bg)", borderRadius: 6,
@@ -842,11 +744,6 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1, fontSize: 13, padding: "10px 14px",
     background: "var(--bg)", border: "1.5px solid var(--border)",
     borderRadius: 8, color: "var(--text)", fontFamily: "var(--font-sans)",
-  },
-  select: {
-    fontSize: 13, padding: "10px 14px", width: "auto",
-    background: "var(--bg)", border: "1.5px solid var(--border)",
-    borderRadius: 8, color: "var(--text)",
   },
   btnPrimary: {
     padding: "10px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,

@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, sessions, meditations, shopping_items, reminders, books, journal_entries, birthdays, weight_entries } from "@/lib/schema";
-import { gte, sql, desc } from "drizzle-orm";
+import { projects, tasks, meditations, shopping_items, reminders, books, journal_entries, birthdays, weight_entries } from "@/lib/schema";
+import { sql, desc } from "drizzle-orm";
 
 export async function GET() {
   try {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
     const [
       projectStats,
       taskStats,
-      todaySessionStats,
       lastMeditation,
       shoppingStats,
       reminderStats,
@@ -29,10 +25,6 @@ export async function GET() {
         total: sql<number>`count(*)`,
         in_progress: sql<number>`count(*) filter (where status = 'En cours')`,
       }).from(tasks),
-      db.select({
-        session_count: sql<number>`count(*)`,
-        total_minutes: sql<number>`coalesce(round(sum(extract(epoch from (end_time - start_time)) / 60)), 0)`,
-      }).from(sessions).where(gte(sessions.start_time, todayStart)),
       db.select({
         lesson: meditations.lesson,
         date: meditations.date,
@@ -103,7 +95,6 @@ export async function GET() {
     return NextResponse.json({
       projects: projectStats[0],
       tasks: taskStats[0],
-      today: todaySessionStats[0],
       lastMeditation: lastMeditation[0] ?? null,
       shopping: shoppingStats[0],
       reminders: { undone: Number(rs.undone), overdue: Number(rs.overdue), today: Number(rs.today), tomorrow: Number(rs.tomorrow) },

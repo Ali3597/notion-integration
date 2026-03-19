@@ -70,7 +70,6 @@ export async function PATCH(request: Request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
     const body = await request.json();
-    // Never allow issue_number to be modified
     const { issue_number: _ignored, ...updateData } = body;
     const [row] = await db.update(tasks).set(updateData).where(eq(tasks.id, id)).returning();
     return NextResponse.json(row);

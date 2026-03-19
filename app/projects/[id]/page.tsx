@@ -32,10 +32,6 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  CartesianGrid,
-  Cell,
 } from "recharts";
 import { KanbanSkeleton } from "@/components/skeletons/KanbanSkeleton";
 import { StatsSkeleton } from "@/components/skeletons/StatsSkeleton";
@@ -55,32 +51,13 @@ const STATUS_OPTIONS = [
   { value: "Terminé",      label: "Terminé" },
 ];
 
-function formatMinutes(min: number | null | undefined) {
-  if (!min) return null;
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  if (h === 0) return `${m}min`;
-  return m > 0 ? `${h}h ${m}min` : `${h}h`;
-}
-
-function formatMonth(ym: string) {
-  const [y, m] = ym.split("-");
-  const d = new Date(Number(y), Number(m) - 1, 1);
-  return d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
-}
-
 // ─────────────────────────── Stats types ──────────────────────────────────
 
 type ProjectStats = {
   completion: { total: number; done: number; in_progress: number; todo: number; pct: number };
-  totalMinutes: number;
-  sessionCount: number;
   isParent: boolean;
-  children: { id: string; name: string; minutes: number; sessions: number }[];
-  timeByWeek: { week: string; minutes: number }[];
+  children: { id: string; name: string }[];
   tasksByWeek: { week: string; created: number; completed: number }[];
-  timeByDow: { day: string; minutes: number }[];
-  monthly: { month: string; sessions: number; minutes: number }[];
 };
 
 // ─────────────────────────── Task Modal ───────────────────────────────────
@@ -121,13 +98,13 @@ function TaskModal({
     if (!name.trim()) return;
     setSaving(true);
     if (task) {
-      await fetch(`/api/pomodoro/tasks?id=${task.id}`, {
+      await fetch(`/api/tasks?id=${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), status }),
       });
     } else {
-      await fetch("/api/pomodoro/tasks", {
+      await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), status, project_id: projectId }),
@@ -187,17 +164,15 @@ function TaskModal({
 // ─────────────────────────── Task Card ────────────────────────────────────
 
 function TaskCard({
-  task, projectMinutes, onEdit, onDelete, overlay = false, patching = false,
+  task, onEdit, onDelete, overlay = false, patching = false,
 }: {
   task: DBTask;
-  projectMinutes: number | null;
   onEdit: (t: DBTask) => void;
   onDelete: (id: string) => void;
   overlay?: boolean;
   patching?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const time = formatMinutes(projectMinutes);
 
   return (
     <div
@@ -217,7 +192,6 @@ function TaskCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Issue number + actions */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", lineHeight: 1 }}>
           {task.issue_number != null ? `#${task.issue_number}` : ""}
@@ -240,7 +214,6 @@ function TaskCard({
         )}
       </div>
 
-      {/* Task name */}
       <div style={{
         fontSize: 13, fontWeight: 500, lineHeight: 1.4,
         textDecoration: task.status === "Terminé" ? "line-through" : "none",
@@ -248,24 +221,14 @@ function TaskCard({
       }}>
         {task.name}
       </div>
-
-      {/* Footer: session time */}
-      {time && (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-            ⏱ {time}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
 
 // ─────────────────────────── Sortable Card ────────────────────────────────
 
-function SortableCard({ task, projectMinutes, onEdit, onDelete, patching }: {
+function SortableCard({ task, onEdit, onDelete, patching }: {
   task: DBTask;
-  projectMinutes: number | null;
   onEdit: (t: DBTask) => void;
   onDelete: (id: string) => void;
   patching?: boolean;
@@ -279,7 +242,7 @@ function SortableCard({ task, projectMinutes, onEdit, onDelete, patching }: {
       {...attributes}
       {...listeners}
     >
-      <TaskCard task={task} projectMinutes={projectMinutes} onEdit={onEdit} onDelete={onDelete} patching={patching} />
+      <TaskCard task={task} onEdit={onEdit} onDelete={onDelete} patching={patching} />
     </div>
   );
 }
@@ -287,11 +250,10 @@ function SortableCard({ task, projectMinutes, onEdit, onDelete, patching }: {
 // ─────────────────────────── Droppable Column ─────────────────────────────
 
 function KanbanColumn({
-  col, tasks, projectMinutes, onAddTask, onEditTask, onDeleteTask, patchingTaskId,
+  col, tasks, onAddTask, onEditTask, onDeleteTask, patchingTaskId,
 }: {
   col: typeof KANBAN_COLUMNS[number];
   tasks: DBTask[];
-  projectMinutes: number | null;
   onAddTask: (status: string) => void;
   onEditTask: (t: DBTask) => void;
   onDeleteTask: (id: string) => void;
@@ -306,7 +268,6 @@ function KanbanColumn({
       flexDirection: "column",
       overflow: "hidden",
     }}>
-      {/* Column header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 8,
         padding: "12px 16px",
@@ -328,7 +289,6 @@ function KanbanColumn({
         </span>
       </div>
 
-      {/* Cards zone — scrolls internally */}
       <div
         ref={setNodeRef}
         style={{
@@ -351,7 +311,6 @@ function KanbanColumn({
             <SortableCard
               key={t.id}
               task={t}
-              projectMinutes={projectMinutes}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
               patching={patchingTaskId === t.id}
@@ -359,7 +318,6 @@ function KanbanColumn({
           ))}
         </SortableContext>
 
-        {/* Add task link */}
         <button
           onClick={() => onAddTask(col.id)}
           style={{
@@ -388,17 +346,16 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/pomodoro/projects/${projectId}/stats`)
+    fetch(`/api/projects/${projectId}/stats`)
       .then((r) => r.json())
       .then((d) => { setStats(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, [projectId, refreshKey]);
 
-  if (loading) return <StatsSkeleton kpiCount={4} />;
-
+  if (loading) return <StatsSkeleton kpiCount={3} />;
   if (!stats) return null;
 
-  const { completion, totalMinutes, sessionCount, isParent, children, timeByWeek, tasksByWeek, timeByDow, monthly } = stats;
+  const { completion, isParent, children, tasksByWeek } = stats;
 
   const tooltipStyle = {
     contentStyle: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 },
@@ -409,13 +366,12 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Section title */}
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
         Statistiques
       </div>
 
       {/* KPI cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {[
           {
             label: "Avancement",
@@ -427,12 +383,6 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
                 <div style={{ height: "100%", width: `${completion.pct}%`, background: "var(--green)", borderRadius: 2, transition: "width 0.4s ease" }} />
               </div>
             ),
-          },
-          {
-            label: isParent ? "Temps total (incl. sous-projets)" : "Temps total",
-            value: formatMinutes(totalMinutes) ?? "—",
-            sub: `${sessionCount} session${sessionCount !== 1 ? "s" : ""}`,
-            accent: "var(--accent)",
           },
           {
             label: "En cours",
@@ -460,123 +410,35 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
         ))}
       </div>
 
-      {/* Child projects breakdown */}
+      {/* Child projects list */}
       {isParent && children.length > 0 && (
-        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 12, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 12, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-            Répartition par sous-projet
+            Sous-projets
           </div>
-          {(() => {
-            const maxMin = Math.max(...children.map((c) => c.minutes), 1);
-            return children
-              .slice()
-              .sort((a, b) => b.minutes - a.minutes)
-              .map((child) => (
-                <div key={child.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-                    <span style={{ fontWeight: 500, color: "var(--text)" }}>{child.name}</span>
-                    <span style={{ fontFamily: "var(--font-mono)", color: child.minutes > 0 ? "var(--accent)" : "var(--text-muted)", fontSize: 12 }}>
-                      {formatMinutes(child.minutes) ?? "—"}
-                      {child.sessions > 0 && (
-                        <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-sans)", marginLeft: 6, fontSize: 11 }}>
-                          ({child.sessions} session{child.sessions !== 1 ? "s" : ""})
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div style={{ height: 5, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${Math.round((child.minutes / maxMin) * 100)}%`,
-                      background: child.minutes > 0 ? "var(--accent)" : "transparent",
-                      borderRadius: 3,
-                      transition: "width 0.4s ease",
-                    }} />
-                  </div>
-                </div>
-              ));
-          })()}
+          {children.map((child) => (
+            <div key={child.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>▹</span>
+              <Link href={`/projects/${child.id}`} style={{ fontSize: 13, color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}>
+                {child.name}
+              </Link>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Charts grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-
-        {/* Temps / semaine */}
-        <div style={chartCard}>
-          <div style={chartTitle}>Temps / semaine (4 sem.)</div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={timeByWeek} barSize={28}>
-              <XAxis dataKey="week" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip
-                formatter={(v: number) => [formatMinutes(v) ?? `${v}min`, "Temps"]}
-                {...tooltipStyle}
-              />
-              <Bar dataKey="minutes" radius={[4, 4, 0, 0]}>
-                {timeByWeek.map((_, i) => (
-                  <Cell key={i} fill={i === timeByWeek.length - 1 ? "var(--accent)" : "rgba(59,126,248,0.35)"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Tâches / semaine */}
-        <div style={chartCard}>
-          <div style={chartTitle}>Tâches / semaine (8 sem.)</div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={tasksByWeek} barSize={14} barGap={2}>
-              <XAxis dataKey="week" tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <YAxis hide allowDecimals={false} />
-              <Tooltip {...tooltipStyle} />
-              <Bar dataKey="created" name="Créées" fill="rgba(136,136,170,0.35)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="completed" name="Terminées" fill="rgba(22,163,74,0.6)" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Temps par jour de semaine */}
-        <div style={chartCard}>
-          <div style={chartTitle}>Par jour de semaine</div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={timeByDow} barSize={24}>
-              <XAxis dataKey="day" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip
-                formatter={(v: number) => [formatMinutes(v) ?? `${v}min`, "Temps"]}
-                {...tooltipStyle}
-              />
-              <Bar dataKey="minutes" radius={[4, 4, 0, 0]} fill="rgba(59,126,248,0.45)" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Activité mensuelle */}
-        <div style={chartCard}>
-          <div style={chartTitle}>Activité mensuelle</div>
-          {monthly.length === 0 ? (
-            <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>
-              Aucune donnée
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={monthly.map((r) => ({ ...r, month: formatMonth(r.month) }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip
-                  formatter={(v: number, name: string) =>
-                    name === "minutes" ? [formatMinutes(v) ?? `${v}min`, "Temps"] : [v, "Sessions"]
-                  }
-                  {...tooltipStyle}
-                />
-                <Line type="monotone" dataKey="minutes" name="minutes" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3, fill: "var(--accent)" }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
+      {/* Tâches / semaine chart */}
+      <div style={chartCard}>
+        <div style={chartTitle}>Tâches / semaine (8 sem.)</div>
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={tasksByWeek} barSize={14} barGap={2}>
+            <XAxis dataKey="week" tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+            <YAxis hide allowDecimals={false} />
+            <Tooltip {...tooltipStyle} />
+            <Bar dataKey="created" name="Créées" fill="rgba(136,136,170,0.35)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="completed" name="Terminées" fill="rgba(22,163,74,0.6)" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -586,7 +448,7 @@ function StatsSection({ projectId, refreshKey }: { projectId: string; refreshKey
 
 type ProjectDetail = DBProject & {
   parents: { id: string; name: string }[];
-  children: { id: string; name: string; own_minutes: number }[];
+  children: { id: string; name: string }[];
 };
 
 function getColumnId(id: string, cols: Record<string, DBTask[]>): string | null {
@@ -613,7 +475,6 @@ export default function ProjectKanbanPage() {
   const [patchingTaskId, setPatchingTaskId] = useState<string | null>(null);
   const dragFromColRef = useRef<string | null>(null);
 
-  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTask, setModalTask] = useState<DBTask | null>(null);
   const [modalStatus, setModalStatus] = useState("Non commencé");
@@ -622,12 +483,10 @@ export default function ProjectKanbanPage() {
     document.title = project ? `${project.name} — life×hub` : "Projets — life×hub";
   }, [project]);
 
-  const projectMinutes = project?.own_minutes ?? null;
-
   const load = useCallback(async () => {
     const [projData, tasksData] = await Promise.all([
-      fetch("/api/pomodoro/projects").then((r) => r.json()),
-      fetch(`/api/pomodoro/tasks?projectId=${id}&all=true`).then((r) => r.json()),
+      fetch("/api/projects").then((r) => r.json()),
+      fetch(`/api/tasks?projectId=${id}&all=true`).then((r) => r.json()),
     ]);
     const proj = Array.isArray(projData) ? projData.find((p: ProjectDetail) => p.id === id) : null;
     setProject(proj ?? null);
@@ -642,8 +501,6 @@ export default function ProjectKanbanPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
-
-  // ── DnD handlers ──
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -674,7 +531,6 @@ export default function ProjectKanbanPage() {
 
   async function handleDragEnd({ active, over }: DragEndEvent) {
     setActiveTask(null);
-    // Use the ref — columns state was already mutated by DragOver
     const fromCol = dragFromColRef.current;
     dragFromColRef.current = null;
 
@@ -683,7 +539,6 @@ export default function ProjectKanbanPage() {
     const toCol = getColumnId(over.id as string, columns);
     if (!toCol) return;
 
-    // Same column reorder
     if (fromCol === toCol) {
       const oldIndex = columns[fromCol].findIndex((t) => t.id === active.id);
       const newIndex = columns[fromCol].findIndex((t) => t.id === over.id);
@@ -696,22 +551,20 @@ export default function ProjectKanbanPage() {
       return;
     }
 
-    // Status changed — already moved optimistically in DragOver, now persist
     setPatchingTaskId(active.id as string);
     try {
-      await fetch(`/api/pomodoro/tasks?id=${active.id}`, {
+      await fetch(`/api/tasks?id=${active.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: toCol }),
       });
+      setStatsKey((k) => k + 1);
     } catch {
-      load(); // Rollback on error
+      load();
     } finally {
       setPatchingTaskId(null);
     }
   }
-
-  // ── Task actions ──
 
   function openCreate(status: string) {
     setModalTask(null);
@@ -727,11 +580,9 @@ export default function ProjectKanbanPage() {
 
   async function handleDelete(taskId: string) {
     if (!confirm("Supprimer cette tâche ?")) return;
-    await fetch(`/api/pomodoro/tasks?id=${taskId}`, { method: "DELETE" });
+    await fetch(`/api/tasks?id=${taskId}`, { method: "DELETE" });
     load();
   }
-
-  // ── Header counters ──
 
   const allTasks = Object.values(columns).flat();
   const totalCount = allTasks.length;
@@ -750,7 +601,7 @@ export default function ProjectKanbanPage() {
       <main style={{ minHeight: "100vh", background: "var(--bg)", padding: "48px 40px", display: "flex", flexDirection: "column", gap: 32 }}>
         <Link href="/projects" className="btn-back">← Projets</Link>
         <KanbanSkeleton />
-        <StatsSkeleton kpiCount={4} />
+        <StatsSkeleton kpiCount={3} />
       </main>
     );
   }
@@ -792,9 +643,6 @@ export default function ProjectKanbanPage() {
             <span>{totalCount} tâche{totalCount !== 1 ? "s" : ""}</span>
             {inProgressCount > 0 && <span style={{ color: "var(--accent)" }}>{inProgressCount} en cours</span>}
             {doneCount > 0 && <span style={{ color: "var(--green)" }}>{doneCount} terminée{doneCount !== 1 ? "s" : ""}</span>}
-            {formatMinutes(projectMinutes) && (
-              <span style={{ fontFamily: "var(--font-mono)" }}>⏱ {formatMinutes(projectMinutes)}</span>
-            )}
           </div>
         </div>
         <button
@@ -806,7 +654,7 @@ export default function ProjectKanbanPage() {
         </button>
       </div>
 
-      {/* Kanban board — 60vh with per-column internal scroll */}
+      {/* Kanban board */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -820,7 +668,6 @@ export default function ProjectKanbanPage() {
               key={col.id}
               col={col}
               tasks={columns[col.id] ?? []}
-              projectMinutes={projectMinutes}
               onAddTask={openCreate}
               onEditTask={openEdit}
               onDeleteTask={handleDelete}
@@ -833,7 +680,6 @@ export default function ProjectKanbanPage() {
           {activeTask && (
             <TaskCard
               task={activeTask}
-              projectMinutes={projectMinutes}
               onEdit={() => {}}
               onDelete={() => {}}
               overlay

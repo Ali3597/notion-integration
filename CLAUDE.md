@@ -61,10 +61,9 @@ app/
   layout.tsx                      # Root layout: globals.css, auth topbar (logout)
   globals.css                     # CSS variables (theme), global styles, .btn-back, .btn-primary, cursor fixes
   login/page.tsx                  # Login page (dark theme, Google sign-in)
-  pomodoro/page.tsx               # Pomodoro timer + sessions table + today stats
-  projects/page.tsx               # CRUD table — projects with session stats + column-header filters
-  projects/[id]/page.tsx          # Single project view — tasks, sessions, breadcrumb (Projets › Nom)
-  tasks/page.tsx                  # CRUD table — tasks with column-header filters + session stats
+  projects/page.tsx               # CRUD table — projects + task stats + column-header filters
+  projects/[id]/page.tsx          # Single project view — Kanban tasks + task stats, breadcrumb (Projets › Nom)
+  tasks/page.tsx                  # CRUD table — tasks with column-header filters
   reminders/page.tsx              # Rappels du quotidien — ajout rapide, filtres, badges retard
   petitbambou/page.tsx            # 4 tabs: Aperçu | Historique | Calendrier | Statistiques
   shopping/page.tsx               # 2 tabs: Général | Par catégorie — wishlist + budget
@@ -74,13 +73,12 @@ app/
   journal/page.tsx                # Journal entries + logs
   api/
     auth/[...nextauth]/route.ts   # NextAuth.js catch-all
-    overview/route.ts             # GET — live dashboard stats (projects, tasks, today, meditation, shopping, reminders, library)
-    pomodoro/
-      projects/route.ts           # GET/POST/PATCH/DELETE — projects with session stats
-      projects/relations/route.ts # GET/POST/DELETE — parent-child project relations
-      tasks/route.ts              # GET/POST/PATCH/DELETE — tasks with filters + session stats
-      sessions/route.ts           # GET (last 10) / POST / DELETE
-      today-stats/route.ts        # GET — sessions count + minutes today
+    overview/route.ts             # GET — live dashboard stats (projects, tasks, meditation, shopping, reminders, library)
+    projects/route.ts             # GET/POST/PATCH/DELETE — projects with task stats + parent/child relations
+    projects/relations/route.ts   # POST/DELETE — parent-child project relations
+    projects/[id]/stats/route.ts  # GET — task completion KPIs + tasks/week chart for a project
+    projects/global-stats/route.ts # GET — KPIs + tasks/week + task heatmap (90 days)
+    tasks/route.ts                # GET/POST/PATCH/DELETE — tasks with project filter
     reminders/route.ts            # GET/POST/PATCH/DELETE — reminders with due_date + done toggle
     petitbambou/
       stats/route.ts              # GET — PB API metrics + local DB stats + 10 recent sessions

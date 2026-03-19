@@ -29,11 +29,9 @@ export type DBProject = {
   type: string | null;
   created_at?: string | null;
   task_count?: number;
-  session_count?: number;
-  own_minutes?: number;
-  total_minutes?: number;
+  completed_tasks?: number;
   parents: { id: string; name: string }[];
-  children: { id: string; name: string; own_minutes: number }[];
+  children: { id: string; name: string }[];
 };
 
 export type DBTask = {
@@ -45,28 +43,9 @@ export type DBTask = {
   issue_number?: number | null;
 };
 
-export type DBSession = {
-  id: string;
-  name: string | null;
-  project_id: string | null;
-  project_name: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  notes: string | null;
-  duration_min: number | null;
-};
-
 // Legacy aliases kept for existing references
 export type NotionProject = DBProject;
 export type NotionTask = DBTask;
-export type NotionSession = {
-  id: string;
-  name: string;
-  startTime: string | null;
-  endTime: string | null;
-  duration: number | null;
-  task: string | null;
-};
 
 // ── Library ──────────────────────────────────────────────────────────────────
 
