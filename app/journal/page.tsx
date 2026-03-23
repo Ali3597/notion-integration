@@ -288,7 +288,7 @@ function JournalContent() {
         {/* Header */}
         <div style={{ padding: "18px 14px 12px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
           <div style={{ marginBottom: 10 }}>
-            <Link href="/" className="btn-back" style={{ marginBottom: 0 }}>← Accueil</Link>
+
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 10, letterSpacing: "-0.01em" }}>
             📖 Journal

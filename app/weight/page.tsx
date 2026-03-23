@@ -591,7 +591,7 @@ export default function WeightPage() {
 
   return (
     <main style={{ maxWidth: 960, margin: "0 auto", padding: "32px 28px" }}>
-      <Link href="/" className="btn-back">← Accueil</Link>
+
 
       {/* Header */}
       <div style={{ margin: "20px 0 24px" }}>

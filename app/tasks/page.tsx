@@ -140,7 +140,7 @@ export default function TasksPage() {
 
   return (
     <main style={styles.main}>
-      <Link href="/" className="btn-back">← Accueil</Link>
+
       <div style={styles.header}>
         <div style={styles.title}>Tâches</div>
         <button className="btn-primary" style={styles.btnPrimary} onClick={() => setCreating((v) => !v)}>

@@ -232,7 +232,6 @@ export default function DndPage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", padding: "24px 32px", maxWidth: 1200, margin: "0 auto" }}>
-      <Link href="/" className="btn-back">← Accueil</Link>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0 24px" }}>
         <span style={{ fontSize: 28 }}>🎲</span>

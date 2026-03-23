@@ -276,7 +276,7 @@ export default function RemindersPage() {
 
   return (
     <main style={styles.main}>
-      <Link href="/" className="btn-back">← Accueil</Link>
+
 
       {/* Header */}
       <div style={styles.header}>

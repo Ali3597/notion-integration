@@ -381,7 +381,7 @@ export default function BirthdaysPage() {
 
   return (
     <main style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px" }}>
-      <Link href="/" className="btn-back">← Accueil</Link>
+
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", margin: "20px 0 28px" }}>

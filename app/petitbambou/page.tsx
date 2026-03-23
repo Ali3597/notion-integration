@@ -947,7 +947,7 @@ export default function PetitBambouPage() {
 
   return (
     <main style={styles.main}>
-      <Link href="/" className="btn-back">← Accueil</Link>
+
       <div style={styles.header}>
         <div style={styles.logo}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 28 }}>🎋</span>

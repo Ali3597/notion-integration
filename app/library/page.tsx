@@ -1846,7 +1846,7 @@ export default function LibraryPage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", padding: "48px 40px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1200, margin: "0 auto" }}>
-      <Link href="/" className="btn-back">← Accueil</Link>
+
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>

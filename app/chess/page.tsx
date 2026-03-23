@@ -85,7 +85,7 @@ export default function ChessPage() {
 
   return (
     <main style={styles.main}>
-      <Link href="/" className="btn-back">← Accueil</Link>
+
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.logo}>

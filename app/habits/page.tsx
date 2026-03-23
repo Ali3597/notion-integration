@@ -143,7 +143,7 @@ export default function HabitsPage() {
         alignItems: "center",
         gap: 16,
       }}>
-        <Link href="/" className="btn-back">← Accueil</Link>
+
         <div style={{ flex: 1 }}>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>🎯 Habitudes</h1>
         </div>
