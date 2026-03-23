@@ -70,8 +70,10 @@ app/
   chess/page.tsx                  # Chess.com sync (still Notion-backed)
   library/page.tsx                # 5 tabs: Ma Bibliothèque | Auteurs | Genres | Séries | Notes
   habits/page.tsx                 # 3 tabs: Aujourd'hui (checklist+streaks) | Calendrier (par habitude) | Statistiques (Recharts: heatmap, bar, line, radar)
-  journal/page.tsx                # Journal entries + logs
-  dnd/page.tsx                    # 6 tabs: Personnage | Sorts | Équipement | Quêtes | Sessions | Statistiques
+  journal/page.tsx                # Journal entries + logs horodatés
+  birthdays/page.tsx              # Liste anniversaires avec âge + compte à rebours
+  weight/page.tsx                 # Courbe poids Recharts + stats (min/max/moy/tendance) ; alimentation iOS Shortcut
+  dnd/page.tsx                    # 7 tabs: Personnage | Sorts | Équipement | Quêtes | Sessions | Personnages | Statistiques
   api/
     auth/[...nextauth]/route.ts   # NextAuth.js catch-all
     overview/route.ts             # GET — live dashboard stats (projects, tasks, meditation, shopping, reminders, library)
@@ -107,10 +109,30 @@ app/
     habits/log/route.ts           # GET ?from=&to=&habit_id= / POST { habit_id, completed_date, note? } / DELETE ?habit_id=&date=
     habits/stats/route.ts         # GET ?id=&days= — heatmap, byDayOfWeek, byMonth, streakHistory for Recharts
     habits/overview/route.ts      # GET — 90-day grid for all active habits (dates[], grid{ habit_id: dates[] })
+    habits/general-stats/route.ts # GET — aggregate stats across all habits
+    journal/
+      entries/route.ts            # GET/POST/PATCH/DELETE — journal entries (title, pinned)
+      logs/route.ts               # GET/POST/PATCH/DELETE — journal logs with entry_id + review_date
+    birthdays/route.ts            # GET/POST/PATCH/DELETE — birthdays sorted by next occurrence
+    weight/
+      entries/route.ts            # GET/POST/PATCH/DELETE — weight entries
+      stats/route.ts              # GET — min/max/avg/trend stats + chart data
+      apple-health/route.ts       # POST (no auth) — iOS Shortcut endpoint for Apple Health data
+    calendar/
+      route.ts                    # GET — iCal events from ICAL_URL env var
+      unified/route.ts            # GET — unified calendar: iCal + birthdays + reminders + D&D sessions
+    dashboard/route.ts            # GET — widget data for home dashboard (habits, reminders, calendar)
+    overview/route.ts             # GET — live stats for hub home (projects, tasks, meditation, library, next_dnd_session)
     dnd/
       character/route.ts          # GET (first row) / PATCH (upsert) — strips id/created_at/updated_at before spread
       character/avatar/route.ts   # POST multipart/form-data → saves to public/uploads/dnd/, updates avatar_url in DB
+      spells/route.ts             # GET/POST/PATCH/DELETE — spells list
       spells/fetch/route.ts       # GET ?url= — scrapes aidedd.org server-side, caches to DB; parser handles single-quoted class attrs + <strong> labels
+      equipment/route.ts          # GET/POST/PATCH/DELETE — equipment
+      objectives/route.ts         # GET/POST/PATCH/DELETE — objectives/quests
+      sessions/route.ts           # GET/POST/PATCH/DELETE — D&D sessions
+      companions/route.ts         # GET/POST/PATCH/DELETE — personnages (NPC + companions); sorted by name
+      upload/route.ts             # POST multipart/form-data → saves to public/uploads/dnd/, returns { url } (generic, no DB update)
       seed/route.ts               # POST — idempotent seed (Matshana, 21 sorts, 5 équipements, 5 objectifs); guard checks dnd_character AND dnd_spells
 auth.ts                           # NextAuth config: Google provider, email whitelist
 middleware.ts                     # Protects all routes except /login and /api/auth/*
@@ -118,7 +140,7 @@ hooks/
   useDynamicFavicon.ts            # Client hook — draws emoji on canvas → injects <link rel="icon"> data URL
 lib/
   db.ts                           # PostgreSQL pool + Drizzle instance
-  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs, dnd_character, dnd_spells, dnd_equipment, dnd_objectives, dnd_sessions
+  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs, journal_entries, journal_logs, birthdays, weight_entries, dnd_character, dnd_spells, dnd_equipment, dnd_objectives, dnd_sessions, dnd_companions
   petitbambou.ts                  # PB API client + computeStreaks()
   notion-client.ts                # Minimal Notion client — ONLY for chess integration
   chess-notion.ts                 # Chess sync modules (rating, openings, daily, puzzles, formats)
@@ -151,6 +173,11 @@ dnd_spells        id, name, level, school, casting_time, range, components, dura
 dnd_equipment     id, name, type, description, magical, equipped, quantity, notes, created_at
 dnd_objectives    id, title, description, category, status, notes, created_at
 dnd_sessions      id, title, session_date (date), session_time, status, summary, notes, level_at_session, journal, created_at
+dnd_companions    id, name, class, race, level, player_name, description, personality, backstory, relationship, notes, avatar_url, is_companion (bool), created_at
+journal_entries   id, title, pinned (bool), created_at, updated_at
+journal_logs      id, entry_id → journal_entries (cascade), content, review_date (date), created_at
+birthdays         id, name, birth_date (date), year_known (bool), note, created_at
+weight_entries    id, measured_at (timestamp, unique), weight (numeric), source, created_at
 ```
 
 `duration_min` for sessions is computed on the fly:
@@ -279,3 +306,30 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - **Special abilities**: stored as JSON `{id, name, description}[]` in `special_abilities`. `SpecialAbilitiesBlock` component handles inline add/edit/delete — same debounced autosave pattern.
 - **Calendar integration**: planned D&D sessions (status ≠ "Terminée") appear in `/api/calendar/unified` as `"dnd"` source (purple `#8b5cf6`). `next_dnd_session` also exposed via `/api/overview`.
 - **Recharts**: used for radar chart (stats), bar charts (HP, sorts par niveau, équipement), line chart (progression niveau par session), pie chart.
+- **Onglet Personnages** (`dnd_companions`): répertorie tous les PNJ + compagnons. `is_companion = true` → section "Compagnons" en tête de liste, sinon "Autres personnages". Drawer latéral partagé pour création et édition — autosave 1.5s en mode édition. Avatar uploadé via `POST /api/dnd/upload` (endpoint générique sans mise à jour DB) puis PATCH companions pour persister l'URL. Couleur d'avatar générée via hash du nom (pas de dépendance externe).
+- **Upload générique** : `POST /api/dnd/upload` sauvegarde tout fichier dans `public/uploads/dnd/` et retourne `{ url }` sans toucher la DB — à utiliser pour les avatars companions. L'endpoint `/api/dnd/character/avatar` reste dédié au personnage principal (sauvegarde + update DB en une requête).
+
+## Weight Module — Specific Notes
+
+- `weight_entries.measured_at` is a `timestamp` with UNIQUE constraint — deduplication key when syncing from Apple Health.
+- `POST /api/weight/apple-health` has **no authentication** by design — called by an iOS Shortcut that can't handle OAuth. Accepts `{ weight, measured_at?, source? }`.
+- `/weight` page uses Recharts `LineChart` for the weight curve. Stats: min, max, avg, trend (linear regression over last N entries).
+- Source values: `"apple_health"` (default), `"manual"`.
+
+## Birthdays Module — Specific Notes
+
+- `birth_date` is a `date` column returned as `"YYYY-MM-DD"`. `year_known` (bool) controls whether the year is displayed or just day/month.
+- Sorting by next occurrence: compute the next birthday relative to today — wraps around year boundary.
+- Age is only shown when `year_known = true`.
+
+## Journal Module — Specific Notes
+
+- Two-level structure: `journal_entries` (titles, pinnable) → `journal_logs` (timestamped content blocks within an entry).
+- `journal_logs.review_date` is an optional date for spaced-repetition review scheduling.
+- `journal_entries` cascade-deletes its `journal_logs` on deletion.
+
+## Calendar / Dashboard — Specific Notes
+
+- `GET /api/calendar/unified` aggregates 4 sources: iCal events (from `ICAL_URL`), birthdays, reminders with `due_date`, D&D planned sessions. Each event has a `source` field: `"ical"`, `"birthday"`, `"reminder"`, `"dnd"`.
+- `GET /api/dashboard` powers the home dashboard widgets — returns habits due today, upcoming reminders, and calendar events for the current week.
+- D&D sessions use purple (`#8b5cf6`) in the unified calendar and dashboard widgets.
