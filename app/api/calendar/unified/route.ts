@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { birthdays, reminders } from "@/lib/schema";
-import { eq, and, lte, isNotNull } from "drizzle-orm";
+import { birthdays, reminders, dnd_sessions } from "@/lib/schema";
+import { eq, and, lte, gte, isNotNull } from "drizzle-orm";
 
 export interface UnifiedEvent {
   id: string;
@@ -10,7 +10,7 @@ export interface UnifiedEvent {
   time?: string; // HH:MM
   end_date?: string; // YYYY-MM-DD (inclusive)
   end_time?: string; // HH:MM
-  source: "ical" | "birthday" | "reminder";
+  source: "ical" | "birthday" | "reminder" | "dnd";
   all_day: boolean;
   metadata?: Record<string, unknown>;
 }
@@ -164,6 +164,29 @@ export async function GET() {
         source: "reminder",
         all_day: true,
         metadata: { id: r.id, done: r.done },
+      });
+    }
+  } catch {
+    // skip
+  }
+
+  // ── D&D Sessions ────────────────────────────────────────────────────────────
+  try {
+    const todayStr = formatDateLocal(today);
+    const dndSessions = await db
+      .select()
+      .from(dnd_sessions)
+      .where(and(eq(dnd_sessions.status, "Planifiée"), gte(dnd_sessions.session_date, todayStr)));
+
+    for (const s of dndSessions) {
+      events.push({
+        id: `dnd-${s.id}`,
+        title: `🎲 ${s.title}`,
+        date: s.session_date,
+        time: s.session_time ?? undefined,
+        source: "dnd",
+        all_day: !s.session_time,
+        metadata: { id: s.id, status: s.status },
       });
     }
   } catch {

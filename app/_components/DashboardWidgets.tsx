@@ -47,20 +47,21 @@ export interface UnifiedEvent {
   time?: string; // HH:MM
   end_date?: string; // YYYY-MM-DD (inclusive)
   end_time?: string; // HH:MM
-  source: "ical" | "birthday" | "reminder";
+  source: "ical" | "birthday" | "reminder" | "dnd";
   all_day: boolean;
   metadata?: Record<string, unknown>;
 }
 
-type SourceKey = "ical" | "birthday" | "reminder";
+type SourceKey = "ical" | "birthday" | "reminder" | "dnd";
 
 const SOURCE_CONFIG: Record<SourceKey, { label: string; color: string }> = {
   ical: { label: "iCloud", color: "#3b7ef8" },
   birthday: { label: "Anniversaires", color: "#d4697e" },
   reminder: { label: "Rappels", color: "#f59e0b" },
+  dnd: { label: "D&D", color: "#8b5cf6" },
 };
 
-const DEFAULT_SOURCES: Record<SourceKey, boolean> = { ical: true, birthday: true, reminder: true };
+const DEFAULT_SOURCES: Record<SourceKey, boolean> = { ical: true, birthday: true, reminder: true, dnd: true };
 const SOURCES_STORAGE_KEY = "calendar-sources";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -312,6 +313,15 @@ function EventPopupCard({
           </Link>
         </div>
       )}
+
+      {/* D&D session link */}
+      {event.source === "dnd" && (
+        <div style={{ paddingTop: 4, borderTop: "1px solid var(--border)" }}>
+          <Link href="/dnd?tab=sessions" style={{ fontSize: 12, color: "#8b5cf6" }}>
+            Voir les sessions D&amp;D →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -493,6 +503,17 @@ function DayPopoverCard({
                     href="/birthdays"
                     onClick={onClose}
                     style={{ fontSize: 12, color: "var(--accent)", flexShrink: 0, marginTop: 3, textDecoration: "none" }}
+                  >
+                    →
+                  </Link>
+                )}
+
+                {/* D&D session link */}
+                {event.source === "dnd" && (
+                  <Link
+                    href="/dnd?tab=sessions"
+                    onClick={onClose}
+                    style={{ fontSize: 12, color: "#8b5cf6", flexShrink: 0, marginTop: 3, textDecoration: "none" }}
                   >
                     →
                   </Link>

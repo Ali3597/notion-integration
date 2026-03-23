@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, meditations, shopping_items, reminders, books, journal_entries, birthdays, weight_entries } from "@/lib/schema";
-import { sql, desc } from "drizzle-orm";
+import { projects, tasks, meditations, shopping_items, reminders, books, journal_entries, birthdays, weight_entries, dnd_sessions } from "@/lib/schema";
+import { sql, desc, and, eq, gte } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -16,6 +16,7 @@ export async function GET() {
       allBirthdays,
       lastWeightRows,
       weekAgoWeightRows,
+      nextDndSessionRows,
     ] = await Promise.all([
       db.select({
         total: sql<number>`count(*)`,
@@ -68,6 +69,13 @@ export async function GET() {
         .where(sql`measured_at < now() - interval '5 days' and measured_at >= now() - interval '14 days'`)
         .orderBy(desc(weight_entries.measured_at))
         .limit(1),
+
+      // Next D&D session
+      db.select({ id: dnd_sessions.id, title: dnd_sessions.title, session_date: dnd_sessions.session_date, session_time: dnd_sessions.session_time })
+        .from(dnd_sessions)
+        .where(and(eq(dnd_sessions.status, "Planifiée"), gte(dnd_sessions.session_date, sql`current_date::text`)))
+        .orderBy(dnd_sessions.session_date)
+        .limit(1),
     ]);
 
     const rs = reminderStats[0];
@@ -92,6 +100,8 @@ export async function GET() {
       ? parseFloat(lastWeight.weight!) - parseFloat(weekAgoWeight.weight!)
       : null;
 
+    const nextDndSession = nextDndSessionRows[0] ?? null;
+
     return NextResponse.json({
       projects: projectStats[0],
       tasks: taskStats[0],
@@ -101,6 +111,7 @@ export async function GET() {
       library: { reading: Number(ls.reading), read: Number(ls.read) },
       journal_review: journalReview.filter((e) => e.review_date !== null),
       birthdays_upcoming: birthdaysUpcoming,
+      next_dnd_session: nextDndSession,
       health: lastWeight
         ? {
             weight: parseFloat(lastWeight.weight!),

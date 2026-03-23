@@ -71,6 +71,7 @@ app/
   library/page.tsx                # 5 tabs: Ma Bibliothèque | Auteurs | Genres | Séries | Notes
   habits/page.tsx                 # 3 tabs: Aujourd'hui (checklist+streaks) | Calendrier (par habitude) | Statistiques (Recharts: heatmap, bar, line, radar)
   journal/page.tsx                # Journal entries + logs
+  dnd/page.tsx                    # 6 tabs: Personnage | Sorts | Équipement | Quêtes | Sessions | Statistiques
   api/
     auth/[...nextauth]/route.ts   # NextAuth.js catch-all
     overview/route.ts             # GET — live dashboard stats (projects, tasks, meditation, shopping, reminders, library)
@@ -106,13 +107,18 @@ app/
     habits/log/route.ts           # GET ?from=&to=&habit_id= / POST { habit_id, completed_date, note? } / DELETE ?habit_id=&date=
     habits/stats/route.ts         # GET ?id=&days= — heatmap, byDayOfWeek, byMonth, streakHistory for Recharts
     habits/overview/route.ts      # GET — 90-day grid for all active habits (dates[], grid{ habit_id: dates[] })
+    dnd/
+      character/route.ts          # GET (first row) / PATCH (upsert) — strips id/created_at/updated_at before spread
+      character/avatar/route.ts   # POST multipart/form-data → saves to public/uploads/dnd/, updates avatar_url in DB
+      spells/fetch/route.ts       # GET ?url= — scrapes aidedd.org server-side, caches to DB; parser handles single-quoted class attrs + <strong> labels
+      seed/route.ts               # POST — idempotent seed (Matshana, 21 sorts, 5 équipements, 5 objectifs); guard checks dnd_character AND dnd_spells
 auth.ts                           # NextAuth config: Google provider, email whitelist
 middleware.ts                     # Protects all routes except /login and /api/auth/*
 hooks/
   useDynamicFavicon.ts            # Client hook — draws emoji on canvas → injects <link rel="icon"> data URL
 lib/
   db.ts                           # PostgreSQL pool + Drizzle instance
-  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs
+  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs, dnd_character, dnd_spells, dnd_equipment, dnd_objectives, dnd_sessions
   petitbambou.ts                  # PB API client + computeStreaks()
   notion-client.ts                # Minimal Notion client — ONLY for chess integration
   chess-notion.ts                 # Chess sync modules (rating, openings, daily, puzzles, formats)
@@ -140,6 +146,11 @@ books             id, title, author_id → authors, genre_id → genres, serie_i
 book_notes        id, title, book_id → books (cascade delete), content, created_at
 habits            id, name, description, icon, color, frequency_type, frequency_days (JSON), target_per_period, active (bool), created_at, archived_at
 habit_logs        id, habit_id → habits (cascade), completed_date (date), note, created_at — UNIQUE(habit_id, completed_date)
+dnd_character     id, name, class, subclass, race, level, background, alignment, avatar_url, backstory, personality, ideals, bonds, flaws, hp_max, hp_current, ac, speed, proficiency_bonus, force, dexterite, constitution, intelligence, sagesse, charisme, spell_save_dc, spell_attack_bonus, spells_prepared_per_day, skill_proficiencies (JSON string[]), save_proficiencies (JSON string[]), special_abilities (JSON {id,name,description}[]), created_at, updated_at
+dnd_spells        id, name, level, school, casting_time, range, components, duration, description, url, prepared, created_at
+dnd_equipment     id, name, type, description, magical, equipped, quantity, notes, created_at
+dnd_objectives    id, title, description, category, status, notes, created_at
+dnd_sessions      id, title, session_date (date), session_time, status, summary, notes, level_at_session, journal, created_at
 ```
 
 `duration_min` for sessions is computed on the fly:
@@ -252,3 +263,19 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - Dashboard widget: shows only habits due today with quick toggle checkboxes.
 - Archive via `PATCH ?id= { active: false, archived_at: ... }` — archived habits disappear from all views.
 - `isHabitDue()` helper is duplicated in `app/api/habits/route.ts`, `app/api/habits/stats/route.ts`, `app/api/dashboard/route.ts`, and `app/habits/page.tsx` (client-side) — kept local to each to avoid shared import complexity.
+
+## D&D Module — Specific Notes
+
+- **Single character model**: always one row in `dnd_character`. GET returns `rows[0] ?? null`; PATCH upserts (insert if empty, update otherwise).
+- **PATCH body stripping**: always destructure out `id`, `created_at`, `updated_at` before spreading into Drizzle `.set()` — Drizzle calls `.toISOString()` on date fields and crashes if they're strings from JSON.
+- **Avatar upload**: handled by `POST /api/dnd/character/avatar` as `multipart/form-data` — saves file to `public/uploads/dnd/` on disk, updates `avatar_url` in DB, returns `{ url }`. Do NOT use base64 data URLs — they exceed Next.js App Router's default 1 MB body limit and silently fail.
+- **Spell enrichment**: `GET /api/dnd/spells/fetch?url=` scrapes aidedd.org server-side and caches results to DB. aidedd.org uses **single-quoted class attributes** (`class='description'`) and `<strong>` labels (not `<b>`). Field divs: `.t` = casting time, `.r` = range, `.c` = components, `.d` = duration, `.description` = description text.
+- **Seed idempotency (StrictMode safe)**: guard in `POST /api/dnd/seed` checks BOTH `dnd_character` AND `dnd_spells` — React StrictMode can trigger the route twice in parallel; checking only one table causes a race condition that creates duplicate spells.
+- **Duplicate key bug (fixed)**: when the spell fetch endpoint returns a cached DB row, never spread `data.id` or `data.created_at` onto the local spell state — it would replace the correct ID with a different row's ID, causing React duplicate key warnings. Always destructure those out: `const { id: _id, created_at: _ca, ...safeData } = data`.
+- **Hydration error (fixed)**: tab state must be initialized to `"character"` (not from `window.location.search`) in `useState`, then read the URL param in a `useEffect` — otherwise server/client HTML mismatch.
+- **Spell slots**: static `SPELL_SLOTS` lookup table (Wizard PHB) keyed by character level — no DB column needed.
+- **Stat modifier formula**: `Math.floor((val - 10) / 2)`, displayed as `+X` / `-X`.
+- **Skills/Saves proficiencies**: stored as JSON string arrays in `skill_proficiencies` / `save_proficiencies`. Toggle adds/removes from array → `set("skill_proficiencies", JSON.stringify(next))` → debounced autosave.
+- **Special abilities**: stored as JSON `{id, name, description}[]` in `special_abilities`. `SpecialAbilitiesBlock` component handles inline add/edit/delete — same debounced autosave pattern.
+- **Calendar integration**: planned D&D sessions (status ≠ "Terminée") appear in `/api/calendar/unified` as `"dnd"` source (purple `#8b5cf6`). `next_dnd_session` also exposed via `/api/overview`.
+- **Recharts**: used for radar chart (stats), bar charts (HP, sorts par niveau, équipement), line chart (progression niveau par session), pie chart.
