@@ -159,8 +159,8 @@ a[href]:hover {
 
 .home-btn {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 12px;
+  left: 12px;
   z-index: 9998;
   width: 36px;
   height: 36px;
