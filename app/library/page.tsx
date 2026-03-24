@@ -1796,11 +1796,12 @@ export default function LibraryPage() {
   useDynamicFavicon("📚");
   useEffect(() => { document.title = "Bibliothèque — life×hub"; }, []);
 
-  const [tab, setTab] = useState<MainTab>(() => {
-    if (typeof window === "undefined") return "library";
+  const [tab, setTab] = useState<MainTab>("library");
+
+  useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("tab") as MainTab;
-    return VALID_LIBRARY_TABS.includes(p) ? p : "library";
-  });
+    if (VALID_LIBRARY_TABS.includes(p)) setTab(p);
+  }, []);
 
   useEffect(() => {
     const url = new URL(window.location.href);

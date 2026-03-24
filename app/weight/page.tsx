@@ -410,13 +410,12 @@ export default function WeightPage() {
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("90d");
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
-    if (typeof window !== "undefined") {
-      const p = new URLSearchParams(window.location.search).get("tab");
-      return (["apercu", "historique"].includes(p ?? "") ? p as Tab : "apercu");
-    }
-    return "apercu";
-  });
+  const [activeTab, setActiveTab] = useState<Tab>("apercu");
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("tab");
+    if (p === "historique") setActiveTab("historique");
+  }, []);
 
   useEffect(() => {
     document.title = "Poids — life×hub";

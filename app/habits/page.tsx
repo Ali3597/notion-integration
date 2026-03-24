@@ -64,11 +64,12 @@ export default function HabitsPage() {
   useDynamicFavicon("🎯");
   useEffect(() => { document.title = "Habitudes — life×hub"; }, []);
 
-  const [tab, setTab] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "today";
+  const [tab, setTab] = useState<Tab>("today");
+
+  useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("tab") as Tab;
-    return VALID_HABITS_TABS.includes(p) ? p : "today";
-  });
+    if (VALID_HABITS_TABS.includes(p)) setTab(p);
+  }, []);
 
   useEffect(() => {
     const url = new URL(window.location.href);

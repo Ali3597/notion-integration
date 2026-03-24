@@ -926,11 +926,12 @@ export default function PetitBambouPage() {
   useDynamicFavicon("🧘");
   useEffect(() => { document.title = "Petit Bambou — life×hub"; }, []);
 
-  const [tab, setTab] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "apercu";
+  const [tab, setTab] = useState<Tab>("apercu");
+
+  useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("tab") as Tab;
-    return VALID_PB_TABS.includes(p) ? p : "apercu";
-  });
+    if (VALID_PB_TABS.includes(p)) setTab(p);
+  }, []);
 
   useEffect(() => {
     const url = new URL(window.location.href);

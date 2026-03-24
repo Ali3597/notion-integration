@@ -311,11 +311,12 @@ export default function ShoppingPage() {
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "general";
+  const [tab, setTab] = useState<Tab>("general");
+
+  useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("tab") as Tab;
-    return VALID_SHOPPING_TABS.includes(p) ? p : "general";
-  });
+    if (VALID_SHOPPING_TABS.includes(p)) setTab(p);
+  }, []);
 
   useEffect(() => {
     const url = new URL(window.location.href);
