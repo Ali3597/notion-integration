@@ -34,7 +34,7 @@ type WeightStats = {
 };
 
 type Period = "30d" | "90d" | "6m" | "all";
-type Tab = "apercu" | "historique" | "raccourci";
+type Tab = "apercu" | "historique";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -401,129 +401,6 @@ function HistoryTable({
   );
 }
 
-// ── Shortcut Config ───────────────────────────────────────────────────────────
-
-function ShortcutConfig({
-  lastMeasuredAt,
-  total,
-}: {
-  lastMeasuredAt: string | null;
-  total: number;
-}) {
-  const [copied, setCopied] = useState(false);
-  const baseUrl = process.env.NEXT_PUBLIC_APP_LOCAL_URL ?? "http://MacBook-Pro-de-Ali.local:3000";
-  const url = `${baseUrl}/api/weight/apple-health`;
-
-  function handleCopy() {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  return (
-    <div style={{
-      background: "rgba(59,126,248,0.04)",
-      border: "1.5px solid rgba(59,126,248,0.2)",
-      borderRadius: 12,
-      padding: "24px 26px",
-    }}>
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 6px" }}>
-        Configuration du Raccourci iOS
-      </h3>
-      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.6 }}>
-        Un Raccourci Apple Santé envoie automatiquement ton poids à cette app dès que tu fermes Renpho Health.
-      </p>
-
-      {/* Stats */}
-      <div style={{ display: "flex", gap: 24, marginBottom: 20, fontSize: 12, flexWrap: "wrap" }}>
-        <div>
-          <span style={{ color: "var(--text-muted)" }}>Dernière réception : </span>
-          <span style={{ fontWeight: 600, color: "var(--text)" }}>
-            {lastMeasuredAt ? fmtDateTime(lastMeasuredAt) : "—"}
-          </span>
-        </div>
-        <div>
-          <span style={{ color: "var(--text-muted)" }}>Mesures en base : </span>
-          <span style={{ fontWeight: 600, color: "var(--text)" }}>{total}</span>
-        </div>
-      </div>
-
-      {/* URL */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{
-          fontSize: 11, fontWeight: 700, color: "var(--text-muted)",
-          textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8,
-        }}>
-          URL à utiliser dans le Raccourci
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-          <code style={{
-            flex: 1, padding: "10px 14px",
-            background: "var(--surface)", border: "1.5px solid var(--border)",
-            borderRadius: 9, fontSize: 13, fontFamily: "var(--font-mono)",
-            color: "var(--accent)", overflow: "hidden", textOverflow: "ellipsis",
-            whiteSpace: "nowrap", display: "flex", alignItems: "center",
-          }}>
-            {url}
-          </code>
-          <button
-            onClick={handleCopy}
-            style={{
-              padding: "10px 18px", borderRadius: 9,
-              border: "1.5px solid var(--border)",
-              background: copied ? "var(--green)" : "var(--surface)",
-              color: copied ? "white" : "var(--text)",
-              fontSize: 12, fontWeight: 600, cursor: "pointer",
-              fontFamily: "var(--font-sans)", transition: "all 0.15s", flexShrink: 0,
-            }}
-          >
-            {copied ? "✓ Copié" : "Copier"}
-          </button>
-        </div>
-      </div>
-
-      {/* Guide */}
-      <div style={{
-        background: "var(--surface)", border: "1px solid var(--border)",
-        borderRadius: 10, padding: "18px 20px",
-      }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", marginBottom: 14 }}>
-          Guide — Créer le Raccourci
-        </div>
-        <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 10 }}>
-          <li style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Ouvrir l&apos;app <strong>Raccourcis</strong> sur iPhone
-          </li>
-          <li style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Créer un nouveau raccourci
-          </li>
-          <li style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Ajouter <strong>« URL »</strong> → coller l&apos;URL ci-dessus
-          </li>
-          <li style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Ajouter <strong>« Obtenir le contenu de l&apos;URL »</strong> (GET) → si pas de valeur → afficher notification{" "}
-            <em>« ⚠️ life×hub n&apos;est pas lancé »</em> → arrêter
-          </li>
-          <li style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Ajouter <strong>« Rechercher des échantillons de santé »</strong> → Type :{" "}
-            <strong>Poids corporel</strong> → Trier par date → Limite 1
-          </li>
-          <li style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Ajouter <strong>« Obtenir le contenu de l&apos;URL »</strong> (POST) → URL : la même → Méthode POST → Corps JSON :{" "}
-            <code style={{ fontSize: 11, background: "var(--surface2)", padding: "2px 5px", borderRadius: 4 }}>
-              {`{ "measured_at": "[date de la mesure]", "weight": "[valeur en kg]" }`}
-            </code>
-          </li>
-          <li style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
-            Dans <strong>Automatisation</strong> → Application → <strong>Renpho Health</strong> → Est fermée → exécuter ce raccourci
-          </li>
-        </ol>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function WeightPage() {
@@ -536,7 +413,7 @@ export default function WeightPage() {
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search).get("tab");
-      return (p as Tab) ?? "apercu";
+      return (["apercu", "historique"].includes(p ?? "") ? p as Tab : "apercu");
     }
     return "apercu";
   });
@@ -586,7 +463,6 @@ export default function WeightPage() {
   const TABS: { id: Tab; label: string }[] = [
     { id: "apercu", label: "Aperçu" },
     { id: "historique", label: "Historique" },
-    { id: "raccourci", label: "Raccourci iOS" },
   ];
 
   return (
@@ -750,16 +626,6 @@ export default function WeightPage() {
         </div>
       )}
 
-      {/* ── TAB: Raccourci iOS ── */}
-      {activeTab === "raccourci" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: 0 }}>Raccourci iOS</h2>
-          <ShortcutConfig
-            lastMeasuredAt={last?.measured_at ?? null}
-            total={statsData?.total ?? 0}
-          />
-        </div>
-      )}
     </main>
   );
 }
