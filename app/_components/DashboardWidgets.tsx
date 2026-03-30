@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { LineChart, Line, Tooltip, ResponsiveContainer } from "recharts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1130,186 +1129,13 @@ function JournalWidget({ items }: { items?: JournalReviewItem[] }) {
   );
 }
 
-// ── Weight widget ─────────────────────────────────────────────────────────────
-
-type WeightData = {
-  last: { weight: number; measured_at: string } | null;
-  stats: {
-    "30d": { min: number; max: number; avg: number } | null;
-    variation_total: number | null;
-    slope_30d: number;
-  } | null;
-  history: { date: string; weight: number }[];
-  periods: { "30d": string };
-};
-
-function WeightWidget({ data }: { data: WeightData | null | undefined }) {
-  const loading = data === undefined;
-
-  if (loading) {
-    return (
-      <div style={widgetStyle}>
-        <div style={widgetTitleStyle}>⚖️ Poids</div>
-        <Skeleton /><Skeleton height={80} />
-      </div>
-    );
-  }
-
-  const last = data?.last ?? null;
-  const s = data?.stats ?? null;
-  const history30 = data
-    ? data.history.filter((p) => !data.periods["30d"] || p.date.slice(0, 10) >= data.periods["30d"])
-    : [];
-
-  // Variation 30j
-  const oldest30 = history30.length > 0 ? history30[0] : null;
-  const var30 =
-    last && oldest30 && oldest30.weight !== last.weight
-      ? Math.round((last.weight - oldest30.weight) * 10) / 10
-      : s?.variation_total != null && history30.length >= 2
-      ? Math.round((history30[history30.length - 1].weight - history30[0].weight) * 10) / 10
-      : null;
-
-  // Trend
-  const slope = s?.slope_30d ?? 0;
-  const trend =
-    slope < -0.02
-      ? { label: "En baisse", icon: "📉", color: "var(--green)", bg: "rgba(16,185,129,0.1)" }
-      : slope > 0.02
-      ? { label: "En hausse", icon: "📈", color: "var(--red)", bg: "rgba(220,38,38,0.08)" }
-      : { label: "Stable", icon: "➡️", color: "var(--text-muted)", bg: "var(--surface2)" };
-
-  // Is last measure today?
-  const dateLabel = (() => {
-    if (!last) return null;
-    const d = new Date(last.measured_at);
-    const today = new Date();
-    const isToday =
-      d.getDate() === today.getDate() &&
-      d.getMonth() === today.getMonth() &&
-      d.getFullYear() === today.getFullYear();
-    return isToday
-      ? "Aujourd'hui"
-      : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-  })();
-
-  return (
-    <div style={widgetStyle}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={widgetTitleStyle}>⚖️ Poids</span>
-        <Link
-          href="/weight"
-          style={{ fontSize: 11, color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}
-        >
-          Voir tout →
-        </Link>
-      </div>
-
-      {!last ? (
-        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-          Aucune mesure — configure le Raccourci iOS pour démarrer.
-        </p>
-      ) : (
-        <>
-          {/* Stats row */}
-          <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-            {/* Poids actuel */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Poids actuel
-              </span>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 500, color: "var(--text)", lineHeight: 1 }}>
-                  {Number(last.weight).toFixed(1)}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>kg</span>
-              </div>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{dateLabel}</span>
-            </div>
-
-            <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch" }} />
-
-            {/* Variation 30j */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Sur 30 jours
-              </span>
-              {var30 !== null ? (
-                <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-                    <span style={{
-                      fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 500, lineHeight: 1,
-                      color: Math.abs(var30) < 0.2 ? "var(--text-muted)" : var30 < 0 ? "var(--green)" : "var(--red)",
-                    }}>
-                      {var30 > 0 ? "+" : ""}{var30.toFixed(1)}
-                    </span>
-                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>kg</span>
-                  </div>
-                  <span style={{ fontSize: 11, color: Math.abs(var30) < 0.2 ? "var(--text-muted)" : var30 < 0 ? "var(--green)" : "var(--red)" }}>
-                    {Math.abs(var30) < 0.2 ? "= stable" : var30 < 0 ? "▼ perte" : "▲ prise"}
-                  </span>
-                </>
-              ) : (
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 500, color: "var(--text-muted)", lineHeight: 1 }}>—</span>
-              )}
-            </div>
-
-            <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch" }} />
-
-            {/* Tendance */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Tendance
-              </span>
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                fontSize: 12, fontWeight: 600, color: trend.color,
-                background: trend.bg, borderRadius: 6,
-                padding: "3px 8px", alignSelf: "flex-start", marginTop: 2,
-              }}>
-                {trend.icon} {trend.label}
-              </span>
-            </div>
-          </div>
-
-          {/* Sparkline */}
-          {history30.length >= 2 ? (
-            <div style={{ marginTop: -4 }}>
-              <ResponsiveContainer width="100%" height={80}>
-                <LineChart data={history30} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-                  <Tooltip
-                    formatter={(v: number) => [`${Number(v).toFixed(2)} kg`, "Poids"]}
-                    labelFormatter={(l: string) =>
-                      new Date(l).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-                    }
-                    contentStyle={{ fontSize: 11, borderRadius: 7, border: "1px solid var(--border)", padding: "4px 8px" }}
-                  />
-                  <Line
-                    type="monotone" dataKey="weight" stroke="var(--accent)"
-                    strokeWidth={2} dot={false} isAnimationActive={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-              Pas encore assez de données — pèse-toi pour commencer le suivi.
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 // ── Main export ───────────────────────────────────────────────────────────────
+
 
 export default function DashboardWidgets({ userName }: { userName: string }) {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [calendarEvents, setCalendarEvents] = useState<UnifiedEvent[] | null>(null);
   const [calendarError, setCalendarError] = useState(false);
-  const [weightData, setWeightData] = useState<WeightData | null | undefined>(undefined);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -1325,10 +1151,6 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
       })
       .catch(() => setCalendarError(true));
 
-    fetch("/api/weight/stats")
-      .then((r) => r.json())
-      .then((d) => setWeightData(d.error ? null : d))
-      .catch(() => setWeightData(null));
   }, []);
 
   return (
@@ -1368,11 +1190,6 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
 
         {/* Méditation — col span 1 */}
         <MeditationWidget meditation={dashboard?.meditation} />
-
-        {/* Poids — col span 2 */}
-        <div style={{ gridColumn: "span 2" }}>
-          <WeightWidget data={weightData} />
-        </div>
 
         {/* Lecture — col span 1 */}
         <ReadingWidget books={dashboard?.books_reading} />

@@ -9,6 +9,6 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    "/((?!api/auth|api/weight/apple-health|login|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/auth|login|_next/static|_next/image|favicon.ico).*)",
   ],
 };

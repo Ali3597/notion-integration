@@ -38,15 +38,6 @@ ICAL_URL=<URL ICS publique iCloud — jamais exposée côté client>
 # Google Books (recherche bibliothèque — 1000 req/jour gratuit)
 GOOGLE_BOOKS_API_KEY=<clé Google Cloud Console — API "Books API">
 
-# Chess.com (optionnel — intégration Notion chess)
-NOTION_TOKEN=secret_...
-CHESS_USERNAME=<chess.com username>
-NOTION_CHESS_PARENT_PAGE_ID=<page_id>
-NOTION_CHESS_RATING_DB=<db_id>
-NOTION_CHESS_OPENINGS_DB=<db_id>
-NOTION_CHESS_DAILY_DB=<db_id>
-NOTION_CHESS_PUZZLES_DB=<db_id>
-NOTION_CHESS_FORMATS_DB=<db_id>
 ```
 
 ## Project Purpose
@@ -67,12 +58,10 @@ app/
   reminders/page.tsx              # Rappels du quotidien — ajout rapide, filtres, badges retard
   petitbambou/page.tsx            # 4 tabs: Aperçu | Historique | Calendrier | Statistiques
   shopping/page.tsx               # 2 tabs: Général | Par catégorie — wishlist + budget
-  chess/page.tsx                  # Chess.com sync (still Notion-backed)
   library/page.tsx                # 5 tabs: Ma Bibliothèque | Auteurs | Genres | Séries | Notes
   habits/page.tsx                 # 3 tabs: Aujourd'hui (checklist+streaks) | Calendrier (par habitude) | Statistiques (Recharts: heatmap, bar, line, radar)
   journal/page.tsx                # Journal entries + logs horodatés
   birthdays/page.tsx              # Liste anniversaires avec âge + compte à rebours
-  weight/page.tsx                 # Courbe poids Recharts + stats (min/max/moy/tendance) ; alimentation iOS Shortcut
   dnd/page.tsx                    # 7 tabs: Personnage | Sorts | Équipement | Quêtes | Sessions | Personnages | Statistiques
   api/
     auth/[...nextauth]/route.ts   # NextAuth.js catch-all
@@ -92,10 +81,6 @@ app/
       analytics/route.ts          # GET — byMonth, byDayOfWeek, streakHistory
     shopping/
       items/route.ts              # GET/POST/PATCH/DELETE — shopping items + budget stats
-    chess/
-      stats/route.ts              # GET — Chess.com stats + Notion DB setup
-      sync/route.ts               # POST — sync games to Notion
-      games/route.ts              # GET — fetch raw games
     library/
       books/route.ts              # GET/POST/PATCH/DELETE — books with author/genre/serie joins + filters
       authors/route.ts            # GET/POST/PATCH/DELETE — authors with book_count
@@ -114,10 +99,6 @@ app/
       entries/route.ts            # GET/POST/PATCH/DELETE — journal entries (title, pinned)
       logs/route.ts               # GET/POST/PATCH/DELETE — journal logs with entry_id + review_date
     birthdays/route.ts            # GET/POST/PATCH/DELETE — birthdays sorted by next occurrence
-    weight/
-      entries/route.ts            # GET/POST/PATCH/DELETE — weight entries
-      stats/route.ts              # GET — min/max/avg/trend stats + chart data
-      apple-health/route.ts       # POST (no auth) — iOS Shortcut endpoint for Apple Health data
     calendar/
       route.ts                    # GET — iCal events from ICAL_URL env var
       unified/route.ts            # GET — unified calendar: iCal + birthdays + reminders + D&D sessions
@@ -140,11 +121,8 @@ hooks/
   useDynamicFavicon.ts            # Client hook — draws emoji on canvas → injects <link rel="icon"> data URL
 lib/
   db.ts                           # PostgreSQL pool + Drizzle instance
-  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs, journal_entries, journal_logs, birthdays, weight_entries, dnd_character, dnd_spells, dnd_equipment, dnd_objectives, dnd_sessions, dnd_companions
+  schema.ts                       # Drizzle tables: projects, tasks, sessions, meditations, shopping_items, reminders, project_relations, authors, genres, series, books, book_notes, habits, habit_logs, journal_entries, journal_logs, birthdays, dnd_character, dnd_spells, dnd_equipment, dnd_objectives, dnd_sessions, dnd_companions
   petitbambou.ts                  # PB API client + computeStreaks()
-  notion-client.ts                # Minimal Notion client — ONLY for chess integration
-  chess-notion.ts                 # Chess sync modules (rating, openings, daily, puzzles, formats)
-  chess.ts                        # Chess.com API client + game parsing
 drizzle.config.ts                 # Drizzle Kit config (schema + DB connection)
 scripts/setup.sh                  # First-time DB setup script
 types/
@@ -168,16 +146,15 @@ books             id, title, author_id → authors, genre_id → genres, serie_i
 book_notes        id, title, book_id → books (cascade delete), content, created_at
 habits            id, name, description, icon, color, frequency_type, frequency_days (JSON), target_per_period, active (bool), created_at, archived_at
 habit_logs        id, habit_id → habits (cascade), completed_date (date), note, created_at — UNIQUE(habit_id, completed_date)
+journal_entries   id, title, pinned (bool), created_at, updated_at
+journal_logs      id, entry_id → journal_entries (cascade), content, review_date (date), created_at
+birthdays         id, name, birth_date (date), year_known (bool), note, created_at
 dnd_character     id, name, class, subclass, race, level, background, alignment, avatar_url, backstory, personality, ideals, bonds, flaws, hp_max, hp_current, ac, speed, proficiency_bonus, force, dexterite, constitution, intelligence, sagesse, charisme, spell_save_dc, spell_attack_bonus, spells_prepared_per_day, skill_proficiencies (JSON string[]), save_proficiencies (JSON string[]), special_abilities (JSON {id,name,description}[]), created_at, updated_at
 dnd_spells        id, name, level, school, casting_time, range, components, duration, description, url, prepared, created_at
 dnd_equipment     id, name, type, description, magical, equipped, quantity, notes, created_at
 dnd_objectives    id, title, description, category, status, notes, created_at
 dnd_sessions      id, title, session_date (date), session_time, status, summary, notes, level_at_session, journal, created_at
 dnd_companions    id, name, class, race, level, player_name, description, personality, backstory, relationship, notes, avatar_url, is_companion (bool), created_at
-journal_entries   id, title, pinned (bool), created_at, updated_at
-journal_logs      id, entry_id → journal_entries (cascade), content, review_date (date), created_at
-birthdays         id, name, birth_date (date), year_known (bool), note, created_at
-weight_entries    id, measured_at (timestamp, unique), weight (numeric), source, created_at
 ```
 
 `duration_min` for sessions is computed on the fly:
@@ -209,7 +186,6 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 
 - **Next.js must stay on `15.2.x`** — 15.3.x and above break `next-auth@beta` (stale Pages Router `_document` error)
 - **No UI libraries** — all styling via CSS custom properties from `globals.css` + inline `React.CSSProperties`
-- `@notionhq/client` is kept only for the chess integration (`lib/notion-client.ts`)
 - **psql binary path on this machine**: `/opt/homebrew/opt/postgresql@16/bin/`
 
 ## Key Conventions
@@ -308,13 +284,6 @@ Uses **NextAuth.js v5** (beta) with Google OAuth provider.
 - **Recharts**: used for radar chart (stats), bar charts (HP, sorts par niveau, équipement), line chart (progression niveau par session), pie chart.
 - **Onglet Personnages** (`dnd_companions`): répertorie tous les PNJ + compagnons. `is_companion = true` → section "Compagnons" en tête de liste, sinon "Autres personnages". Drawer latéral partagé pour création et édition — autosave 1.5s en mode édition. Avatar uploadé via `POST /api/dnd/upload` (endpoint générique sans mise à jour DB) puis PATCH companions pour persister l'URL. Couleur d'avatar générée via hash du nom (pas de dépendance externe).
 - **Upload générique** : `POST /api/dnd/upload` sauvegarde tout fichier dans `public/uploads/dnd/` et retourne `{ url }` sans toucher la DB — à utiliser pour les avatars companions. L'endpoint `/api/dnd/character/avatar` reste dédié au personnage principal (sauvegarde + update DB en une requête).
-
-## Weight Module — Specific Notes
-
-- `weight_entries.measured_at` is a `timestamp` with UNIQUE constraint — deduplication key when syncing from Apple Health.
-- `POST /api/weight/apple-health` has **no authentication** by design — called by an iOS Shortcut that can't handle OAuth. Accepts `{ weight, measured_at?, source? }`.
-- `/weight` page uses Recharts `LineChart` for the weight curve. Stats: min, max, avg, trend (linear regression over last N entries).
-- Source values: `"apple_health"` (default), `"manual"`.
 
 ## Birthdays Module — Specific Notes
 

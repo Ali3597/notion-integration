@@ -43,9 +43,6 @@ export type DBTask = {
   issue_number?: number | null;
 };
 
-// Legacy aliases kept for existing references
-export type NotionProject = DBProject;
-export type NotionTask = DBTask;
 
 // ── Library ──────────────────────────────────────────────────────────────────
 
@@ -101,44 +98,6 @@ export type DBBookNote = {
   content: string | null;
   created_at?: string | null;
 };
-
-// ── Chess ────────────────────────────────────────────────────────────────────
-
-export interface ParsedGame {
-  eco: string;
-  opening: string;
-  white: string;
-  black: string;
-  whiteElo: number;
-  blackElo: number;
-  date: string; // "YYYY.MM.DD"
-  result: "1-0" | "0-1" | "1/2-1/2" | string;
-  timeControl: string;
-  pgn: string;
-  url?: string;
-  endTime?: number; // unix timestamp (from Chess.com JSON)
-}
-
-export interface ChessFormatStats {
-  last?: { rating: number; date: number };
-  best?: { rating: number; date: number; game?: string };
-  record?: { win: number; loss: number; draw: number };
-}
-
-export interface ChessStats {
-  chess_blitz?: ChessFormatStats;
-  chess_rapid?: ChessFormatStats;
-  chess_daily?: ChessFormatStats;
-  tactics?: { highest: { rating: number; date: number }; lowest: { rating: number; date: number } };
-  puzzle_rush?: { best?: { total_attempts: number; score: number }; daily?: { total_attempts: number; score: number } };
-}
-
-export interface ChessSyncResult {
-  synced: boolean;
-  gamesProcessed: number;
-  modules: string[];
-  durationMs: number;
-}
 
 // ── Habits ───────────────────────────────────────────────────────────────────
 

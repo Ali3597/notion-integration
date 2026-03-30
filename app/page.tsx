@@ -30,14 +30,12 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/petitbambou", icon: "🧘", label: "Petit Bambou" },
       { href: "/shopping", icon: "🛒", label: "Shopping" },
       { href: "/birthdays", icon: "🎂", label: "Anniversaires" },
-      { href: "/weight", icon: "⚖️", label: "Poids" },
     ],
   },
   {
     label: "Loisirs",
     items: [
       { href: "/library", icon: "📚", label: "Bibliothèque" },
-      { href: "/chess", icon: "♟️", label: "Chess" },
       { href: "/dnd", icon: "🎲", label: "D&D" },
     ],
   },
