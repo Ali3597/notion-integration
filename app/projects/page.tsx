@@ -438,6 +438,7 @@ export default function ProjectsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -484,6 +485,7 @@ export default function ProjectsPage() {
   const filteredRows = displayRows.filter(({ project: p }) => {
     if (filterStatus && p.status !== filterStatus) return false;
     if (filterType && (p.type ?? "") !== filterType) return false;
+    if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -563,6 +565,15 @@ export default function ProjectsPage() {
       {loading ? <TableSkeleton columns={6} rows={5} /> : (
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ marginBottom: 10 }}>
+        <input
+          type="text"
+          placeholder="Rechercher un projet..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          style={{ ...styles.input, flex: "unset", width: "100%", boxSizing: "border-box" }}
+        />
+      </div>
       <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>

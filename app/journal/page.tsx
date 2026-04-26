@@ -27,6 +27,74 @@ interface JournalLog {
   created_at: string;
 }
 
+// ── Markdown ───────────────────────────────────────────────────────────────────
+
+function inlineMarkdown(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/__(.+?)__/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/_(.+?)_/g, "<em>$1</em>");
+}
+
+function renderMarkdown(text: string): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let inCodeBlock = false;
+  let codeBlockContent: string[] = [];
+  let inUl = false;
+  let inOl = false;
+
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      if (!inCodeBlock) {
+        if (inUl) { result.push("</ul>"); inUl = false; }
+        if (inOl) { result.push("</ol>"); inOl = false; }
+        inCodeBlock = true;
+        codeBlockContent = [];
+      } else {
+        inCodeBlock = false;
+        const code = codeBlockContent.join("\n")
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        result.push(`<pre><code>${code}</code></pre>`);
+        codeBlockContent = [];
+      }
+      continue;
+    }
+    if (inCodeBlock) { codeBlockContent.push(line); continue; }
+
+    if (/^[-*] /.test(line)) {
+      if (inOl) { result.push("</ol>"); inOl = false; }
+      if (!inUl) { result.push("<ul>"); inUl = true; }
+      result.push(`<li>${inlineMarkdown(line.slice(2))}</li>`);
+      continue;
+    }
+    if (/^\d+\. /.test(line)) {
+      if (inUl) { result.push("</ul>"); inUl = false; }
+      if (!inOl) { result.push("<ol>"); inOl = true; }
+      result.push(`<li>${inlineMarkdown(line.replace(/^\d+\. /, ""))}</li>`);
+      continue;
+    }
+    if (inUl) { result.push("</ul>"); inUl = false; }
+    if (inOl) { result.push("</ol>"); inOl = false; }
+
+    if (line.startsWith("### ")) { result.push(`<h3>${inlineMarkdown(line.slice(4))}</h3>`); continue; }
+    if (line.startsWith("## ")) { result.push(`<h2>${inlineMarkdown(line.slice(3))}</h2>`); continue; }
+    if (line.startsWith("# ")) { result.push(`<h1>${inlineMarkdown(line.slice(2))}</h1>`); continue; }
+    if (line.startsWith("> ")) { result.push(`<blockquote>${inlineMarkdown(line.slice(2))}</blockquote>`); continue; }
+    if (/^---+$/.test(line)) { result.push("<hr>"); continue; }
+    if (line.trim() === "") { result.push("<div class='md-spacer'></div>"); continue; }
+    result.push(`<p>${inlineMarkdown(line)}</p>`);
+  }
+  if (inUl) result.push("</ul>");
+  if (inOl) result.push("</ol>");
+  return result.join("");
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function getTodayStr() {
@@ -121,6 +189,8 @@ function JournalContent() {
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const newContentRef = useRef<HTMLTextAreaElement>(null);
+  const editContentRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Load entries ────────────────────────────────────────────────────────────
 
@@ -160,6 +230,20 @@ function JournalContent() {
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();
   }, [editingTitle]);
+
+  useEffect(() => {
+    const el = newContentRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [newContent]);
+
+  useEffect(() => {
+    const el = editContentRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [editLogContent]);
 
   const selectedEntry = entries.find((e) => e.id === selectedId) ?? null;
 
@@ -572,6 +656,7 @@ function JournalContent() {
                       {editingLogId === log.id ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <textarea
+                            ref={editContentRef}
                             value={editLogContent}
                             onChange={(e) => setEditLogContent(e.target.value)}
                             autoFocus
@@ -581,8 +666,9 @@ function JournalContent() {
                               border: "1.5px solid var(--accent)", borderRadius: 8,
                               fontSize: 13, lineHeight: 1.6,
                               color: "var(--text)", background: "var(--bg)",
-                              fontFamily: "var(--font-sans)", outline: "none",
-                              resize: "vertical", boxSizing: "border-box",
+                              fontFamily: "var(--font-mono)", outline: "none",
+                              resize: "none", boxSizing: "border-box",
+                              overflow: "hidden",
                             }}
                           />
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -633,11 +719,14 @@ function JournalContent() {
                             borderRadius: 10,
                             fontSize: 13, lineHeight: 1.7,
                             color: "var(--text)",
-                            whiteSpace: "pre-wrap", wordBreak: "break-word",
+                            wordBreak: "break-word",
                             boxShadow: "var(--shadow-sm)",
                           }}
                         >
-                          {log.content}
+                          <div
+                            className="md-body"
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(log.content) }}
+                          />
                           {/* Hover actions */}
                           <div className="log-actions" style={{
                             position: "absolute", top: 8, right: 10,
@@ -681,25 +770,28 @@ function JournalContent() {
 
             {/* Add log form */}
             <div style={{
-              padding: "16px 32px 20px",
+              padding: "16px 32px 28px",
               borderTop: "1px solid var(--border)",
               flexShrink: 0,
               background: "var(--surface)",
             }}>
               <textarea
+                ref={newContentRef}
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
-                placeholder="Écris ta mise à jour… (Ctrl+Entrée pour soumettre)"
+                placeholder="Écris ta mise à jour en markdown… (Ctrl+Entrée pour soumettre)"
                 rows={3}
                 onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addLog(); }}
                 style={{
-                  width: "100%", padding: "10px 14px",
+                  width: "100%", padding: "12px 14px 20px",
                   border: "1.5px solid var(--border)", borderRadius: 10,
                   fontSize: 13, lineHeight: 1.6,
                   color: "var(--text)", background: "var(--bg)",
-                  fontFamily: "var(--font-sans)", outline: "none",
+                  fontFamily: "var(--font-mono)", outline: "none",
                   resize: "none", boxSizing: "border-box",
                   transition: "border-color 0.12s",
+                  overflow: "hidden",
+                  minHeight: 80,
                 }}
                 onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
                 onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
@@ -740,6 +832,22 @@ function JournalContent() {
         .journal-log-item:hover .log-actions {
           opacity: 1 !important;
         }
+        .md-body p { margin: 0 0 6px; }
+        .md-body p:last-child { margin-bottom: 0; }
+        .md-body h1 { font-size: 18px; font-weight: 700; margin: 10px 0 6px; color: var(--text); }
+        .md-body h2 { font-size: 15px; font-weight: 700; margin: 8px 0 4px; color: var(--text); }
+        .md-body h3 { font-size: 13px; font-weight: 700; margin: 6px 0 3px; color: var(--text); }
+        .md-body strong { font-weight: 700; }
+        .md-body em { font-style: italic; }
+        .md-body code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+        .md-body pre { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 8px 0; overflow-x: auto; }
+        .md-body pre code { background: none; padding: 0; font-size: 12px; color: var(--text); }
+        .md-body ul { margin: 4px 0 6px; padding-left: 20px; list-style: disc; }
+        .md-body ol { margin: 4px 0 6px; padding-left: 20px; list-style: decimal; }
+        .md-body li { margin: 2px 0; }
+        .md-body blockquote { border-left: 3px solid var(--accent); margin: 6px 0; padding: 4px 12px; color: var(--text-muted); font-style: italic; background: rgba(59,126,248,0.04); border-radius: 0 6px 6px 0; }
+        .md-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+        .md-body .md-spacer { height: 8px; }
       `}</style>
     </div>
   );
