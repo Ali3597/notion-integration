@@ -252,3 +252,57 @@ export const dnd_companions = pgTable("dnd_companions", {
   is_companion: boolean("is_companion").default(false),
   created_at: timestamp("created_at").defaultNow(),
 });
+
+// ── Finances ──────────────────────────────────────────────────────────────────
+
+export const finance_categories = pgTable("finance_categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("#3b7ef8"),
+  icon: text("icon").notNull().default("💰"),
+  type: text("type").notNull().default("both"), // "income" | "expense" | "both"
+  budget: numeric("budget"), // enveloppe budgétaire mensuelle optionnelle
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const finance_recurring = pgTable("finance_recurring", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  amount: numeric("amount").notNull(),
+  type: text("type").notNull(), // "income" | "expense"
+  category_id: uuid("category_id").references(() => finance_categories.id, { onDelete: "set null" }),
+  day_of_month: integer("day_of_month").default(1),
+  active: boolean("active").default(true),
+  notes: text("notes"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const finance_transactions = pgTable("finance_transactions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  amount: numeric("amount").notNull(),
+  description: text("description").notNull(),
+  category_id: uuid("category_id").references(() => finance_categories.id, { onDelete: "set null" }),
+  type: text("type").notNull(), // "income" | "expense"
+  date: date("date").notNull(),
+  notes: text("notes"),
+  recurring_id: uuid("recurring_id").references(() => finance_recurring.id, { onDelete: "set null" }),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const finance_accounts = pgTable("finance_accounts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("savings"), // "savings" | "investment" | "checking"
+  institution: text("institution"),
+  color: text("color").notNull().default("#3b7ef8"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const finance_account_snapshots = pgTable("finance_account_snapshots", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  account_id: uuid("account_id").references(() => finance_accounts.id, { onDelete: "cascade" }).notNull(),
+  balance: numeric("balance").notNull(),
+  date: date("date").notNull(),
+  note: text("note"),
+  created_at: timestamp("created_at").defaultNow(),
+});
