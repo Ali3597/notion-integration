@@ -1174,6 +1174,118 @@ function FinancesWidget({ data }: { data?: FinanceWidgetData | null }) {
   );
 }
 
+// ── Planning widget ───────────────────────────────────────────────────────────
+
+type SimplePlanningBlock = {
+  id: string;
+  start_time: string;
+  end_time: string;
+  title: string;
+  status: string | null;
+};
+
+function PlanningWidget() {
+  const [todayBlocks, setTodayBlocks] = useState<SimplePlanningBlock[] | undefined>(undefined);
+  const [tomorrowCount, setTomorrowCount] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const today = toLocalDateStr(new Date());
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    const tomorrow = toLocalDateStr(d);
+
+    Promise.all([
+      fetch(`/api/planning?day=${today}`).then((r) => r.json()),
+      fetch(`/api/planning?day=${tomorrow}`).then((r) => r.json()),
+    ])
+      .then(([t, tm]) => {
+        if (Array.isArray(t)) setTodayBlocks(t);
+        if (Array.isArray(tm)) setTomorrowCount(tm.length);
+      })
+      .catch(() => { setTodayBlocks([]); setTomorrowCount(0); });
+  }, []);
+
+  const loading = todayBlocks === undefined;
+  const total = todayBlocks?.length ?? 0;
+  const doneCount = todayBlocks?.filter((b) => b.status === "done").length ?? 0;
+
+  return (
+    <Widget title="Planning" icon="📋" action={{ label: "Ouvrir →", href: "/planning" }} compact>
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <Skeleton /><Skeleton /><Skeleton />
+        </div>
+      ) : total === 0 ? (
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          Aucun bloc planifié aujourd&apos;hui.
+          {(tomorrowCount ?? 0) > 0 && (
+            <> Demain : <strong>{tomorrowCount}</strong></>
+          )}
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* Progress */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700,
+              color: doneCount === total ? "var(--green)" : "var(--accent)",
+            }}>
+              {doneCount}/{total}
+            </span>
+            <span style={{ fontSize: 10, color: "var(--text-muted)" }}>réalisés</span>
+            {(tomorrowCount ?? 0) > 0 && (
+              <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>
+                Demain : {tomorrowCount}
+              </span>
+            )}
+          </div>
+          {/* Progress bar */}
+          <div style={{ height: 4, background: "var(--surface2)", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{
+              width: `${total > 0 ? Math.round((doneCount / total) * 100) : 0}%`,
+              height: "100%",
+              background: doneCount === total ? "var(--green)" : "var(--accent)",
+              borderRadius: 2,
+              transition: "width 0.3s",
+            }} />
+          </div>
+          {/* Block list */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {todayBlocks!.slice(0, 4).map((block) => {
+              const dotColor =
+                block.status === "done" ? "var(--green)" :
+                block.status === "overtime" ? "#f59e0b" :
+                block.status === "failed" ? "var(--red)" :
+                "var(--border)";
+              return (
+                <div key={block.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+                  <span style={{
+                    fontSize: 10, color: "var(--text-muted)",
+                    fontFamily: "var(--font-mono)", flexShrink: 0, minWidth: 44,
+                  }}>
+                    {block.start_time.replace(":", "h")}
+                  </span>
+                  <span style={{
+                    fontSize: 11, color: "var(--text)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {block.title}
+                  </span>
+                </div>
+              );
+            })}
+            {total > 4 && (
+              <span style={{ fontSize: 10, color: "var(--text-muted)", paddingLeft: 12 }}>
+                +{total - 4} autres
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </Widget>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 
@@ -1237,6 +1349,9 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
         <div style={{ gridColumn: "span 2" }}>
           <ProjectsWidget projects={dashboard?.projects} />
         </div>
+
+        {/* Planning */}
+        <PlanningWidget />
 
         {/* Méditation */}
         <MeditationWidget meditation={dashboard?.meditation} />

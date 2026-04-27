@@ -253,6 +253,22 @@ export const dnd_companions = pgTable("dnd_companions", {
   created_at: timestamp("created_at").defaultNow(),
 });
 
+// ── Planning ──────────────────────────────────────────────────────────────────
+
+export const planning_blocks = pgTable("planning_blocks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  day: date("day").notNull(),
+  start_time: text("start_time").notNull(),  // "HH:MM"
+  end_time: text("end_time").notNull(),      // "HH:MM"
+  title: text("title").notNull(),
+  status: text("status"),                    // null | "done" | "overtime" | "failed"
+  notes: text("notes"),
+  project_id: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+  reminder_id: uuid("reminder_id").references(() => reminders.id, { onDelete: "set null" }),
+  habit_id: uuid("habit_id").references(() => habits.id, { onDelete: "set null" }),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
 // ── Finances ──────────────────────────────────────────────────────────────────
 
 export const finance_categories = pgTable("finance_categories", {

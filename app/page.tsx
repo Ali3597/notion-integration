@@ -17,6 +17,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Productivité",
     items: [
+      { href: "/planning", icon: "📋", label: "Planning" },
       { href: "/projects", icon: "📁", label: "Projets" },
       { href: "/tasks", icon: "✅", label: "Tâches" },
       { href: "/reminders", icon: "🔔", label: "Rappels" },
