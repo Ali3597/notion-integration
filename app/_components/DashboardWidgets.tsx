@@ -29,6 +29,16 @@ type ShoppingStats = {
 };
 type HabitItem = { id: string; name: string; icon: string | null; color: string | null; completed_today: boolean };
 type JournalReviewItem = { id: string; title: string; review_date: string };
+type FinanceWidgetData = {
+  total_patrimony: number;
+  assets: number;
+  debts: number;
+  patrimony_change: number;
+  current_month: { income: number; expense: number; balance: number; savings_rate: number };
+  monthly_patrimony: { label: string; ym: string; total: number }[];
+  top_accounts: { name: string; type: string; color: string; balance: number }[];
+  has_loans: boolean;
+};
 type DashboardData = {
   reminders: Reminder[];
   projects: ProjectWithTasks[];
@@ -112,40 +122,27 @@ function getMonthGrid(year: number, month: number): Date[] {
 // ── Widget wrapper ────────────────────────────────────────────────────────────
 
 function Widget({
-  title,
-  icon,
-  children,
-  action,
-  headerExtra,
-  accent,
+  title, icon, children, action, headerExtra, accent, compact = false,
 }: {
-  title: string;
-  icon: string;
-  children: React.ReactNode;
+  title: string; icon: string; children: React.ReactNode;
   action?: { label: string; href: string };
   headerExtra?: React.ReactNode;
-  accent?: boolean;
+  accent?: boolean; compact?: boolean;
 }) {
+  const style: React.CSSProperties = compact ? compactWidgetStyle : widgetStyle;
   return (
     <div style={{
-      ...widgetStyle,
-      ...(accent ? {
-        borderTop: "3px solid var(--accent)",
-        boxShadow: "0 4px 24px rgba(59,126,248,0.10), var(--shadow-sm)",
-      } : {}),
+      ...style,
+      ...(accent ? { borderTop: "3px solid var(--accent)", boxShadow: "0 4px 24px rgba(59,126,248,0.10), var(--shadow-sm)" } : {}),
     }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 15 }}>{icon}</span>
-          <span style={widgetTitleStyle}>{title}</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: compact ? 13 : 15 }}>{icon}</span>
+          <span style={compact ? compactWidgetTitleStyle : widgetTitleStyle}>{title}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {headerExtra}
-          {action && (
-            <Link href={action.href} className="widget-action-btn">
-              {action.label}
-            </Link>
-          )}
+          {action && <Link href={action.href} className="widget-action-btn">{action.label}</Link>}
         </div>
       </div>
       {children}
@@ -801,45 +798,34 @@ function ProjectsWidget({ projects }: { projects?: ProjectWithTasks[] }) {
   const loading = projects === undefined;
 
   return (
-    <Widget title="Projets en cours" icon="📁" action={{ label: "Projets →", href: "/projects" }}>
+    <Widget title="Projets" icon="📁" action={{ label: "Voir →", href: "/projects" }} compact>
       {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <Skeleton height={60} /><Skeleton height={60} />
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}><Skeleton height={36} /><Skeleton height={36} /></div>
       ) : projects.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "16px 0" }}>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>Aucun projet en cours.</p>
-          <Link href="/projects" style={{ fontSize: 13, color: "var(--accent)" }}>Créer un projet →</Link>
-        </div>
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Aucun projet en cours.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {projects.map((project) => {
             const pct = project.total_tasks > 0 ? Math.round((project.completed_tasks / project.total_tasks) * 100) : 0;
             return (
-              <div key={project.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{project.name}</span>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                    {project.completed_tasks}/{project.total_tasks} tâches
-                  </span>
+              <div key={project.id}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{project.name}</span>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0, marginLeft: 8 }}>{project.completed_tasks}/{project.total_tasks}</span>
                 </div>
-                {/* Progress bar */}
-                <div style={{ background: "var(--surface2)", borderRadius: 4, height: 5, overflow: "hidden" }}>
-                  <div style={{ background: "var(--accent)", width: `${pct}%`, height: "100%", borderRadius: 4, transition: "width 0.3s" }} />
+                <div style={{ background: "var(--surface2)", borderRadius: 3, height: 4, overflow: "hidden" }}>
+                  <div style={{ background: "var(--accent)", width: `${pct}%`, height: "100%", borderRadius: 3, transition: "width 0.3s" }} />
                 </div>
-                {/* Pending tasks */}
                 {project.pending_tasks.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingLeft: 4 }}>
-                    {project.pending_tasks.map((task) => (
-                      <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, color: "var(--text)", flex: 1 }}>{task.name}</span>
+                  <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                    {project.pending_tasks.slice(0, 2).map((task) => (
+                      <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.name}</span>
                       </div>
                     ))}
-                    {project.extra_task_count > 0 && (
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", paddingLeft: 10 }}>
-                        ... et {project.extra_task_count} autres
-                      </div>
+                    {(project.extra_task_count + Math.max(0, project.pending_tasks.length - 2)) > 0 && (
+                      <span style={{ fontSize: 10, color: "var(--text-muted)", paddingLeft: 8 }}>+{project.extra_task_count + Math.max(0, project.pending_tasks.length - 2)} autres</span>
                     )}
                   </div>
                 )}
@@ -858,39 +844,25 @@ function MeditationWidget({ meditation }: { meditation?: MeditationStats }) {
   const loading = meditation === undefined;
 
   return (
-    <Widget title="Méditation" icon="🧘" action={{ label: "Stats →", href: "/petitbambou" }}>
+    <Widget title="Méditation" icon="🧘" action={{ label: "Stats →", href: "/petitbambou" }} compact>
       {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Skeleton height={40} /><Skeleton /><Skeleton />
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}><Skeleton height={32} /><Skeleton /></div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 32, fontWeight: 700, color: "var(--accent2)" }}>
-              {meditation.streak}
-            </span>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>jours de suite</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 700, color: "var(--accent2)" }}>{meditation.streak}</span>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>j. de suite</span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", borderTop: "1px solid var(--border)", paddingTop: 5, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span>Ce mois : <strong style={{ color: "var(--text)" }}>{meditation.month_count} séances</strong></span>
+            {meditation.month_minutes > 0 && <span><strong style={{ color: "var(--text)" }}>{meditation.month_minutes} min</strong></span>}
           </div>
           {meditation.last_session && (
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              Dernière :{" "}
-              <span style={{ color: "var(--text)" }}>
-                {new Date(meditation.last_session.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
-              </span>
-              {meditation.last_session.duration_min && (
-                <> · {Math.round(Number(meditation.last_session.duration_min))} min</>
-              )}
-              {meditation.last_session.lesson && (
-                <div style={{ marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {meditation.last_session.lesson}
-                </div>
-              )}
+            <div style={{ fontSize: 10, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              Dernière : {new Date(meditation.last_session.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+              {meditation.last_session.duration_min && <> · {Math.round(Number(meditation.last_session.duration_min))} min</>}
             </div>
           )}
-          <div style={{ fontSize: 12, color: "var(--text-muted)", paddingTop: 2, borderTop: "1px solid var(--border)" }}>
-            Ce mois : <span style={{ color: "var(--text)", fontWeight: 600 }}>{meditation.month_count} sessions</span>
-            {meditation.month_minutes > 0 && <> · {meditation.month_minutes} min</>}
-          </div>
         </div>
       )}
     </Widget>
@@ -903,35 +875,23 @@ function ReadingWidget({ books }: { books?: BookReading[] }) {
   const loading = books === undefined;
 
   return (
-    <Widget title="Lecture en cours" icon="📚" action={{ label: "Bibliothèque →", href: "/library" }}>
+    <Widget title="Lecture" icon="📚" action={{ label: "Biblio →", href: "/library" }} compact>
       {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Skeleton height={52} /><Skeleton height={52} />
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}><Skeleton height={36} /><Skeleton height={36} /></div>
       ) : books.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Aucun livre en cours.</p>
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Aucun livre en cours.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {books.map((book) => (
-            <div key={book.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div key={book.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {book.image_url ? (
-                <img
-                  src={book.image_url}
-                  alt={book.title}
-                  style={{ width: 36, height: 52, objectFit: "cover", borderRadius: 4, flexShrink: 0 }}
-                />
+                <img src={book.image_url} alt={book.title} style={{ width: 26, height: 38, objectFit: "cover", borderRadius: 3, flexShrink: 0 }} />
               ) : (
-                <div style={{ width: 36, height: 52, borderRadius: 4, background: "var(--surface2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "var(--text-muted)" }}>
-                  📖
-                </div>
+                <div style={{ width: 26, height: 38, borderRadius: 3, background: "var(--surface2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>📖</div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {book.title}
-                </div>
-                {book.author_name && (
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{book.author_name}</div>
-                )}
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{book.title}</div>
+                {book.author_name && <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 1 }}>{book.author_name}</div>}
               </div>
             </div>
           ))}
@@ -947,39 +907,27 @@ function ShoppingWidget({ shopping }: { shopping?: ShoppingStats }) {
   const loading = shopping === undefined;
 
   return (
-    <Widget title="Shopping" icon="🛒" action={{ label: "Voir la liste →", href: "/shopping" }}>
+    <Widget title="Shopping" icon="🛒" action={{ label: "Liste →", href: "/shopping" }} compact>
       {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Skeleton height={32} /><Skeleton /><Skeleton />
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}><Skeleton height={28} /><Skeleton /><Skeleton /></div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", gap: 14 }}>
             <div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--green)" }}>
-                {shopping.non_purchased_count}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>articles</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--green)" }}>{shopping.non_purchased_count}</div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>articles</div>
             </div>
             <div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--green)" }}>
-                {shopping.remaining_budget.toFixed(0)}€
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>à dépenser</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--green)" }}>{shopping.remaining_budget.toFixed(0)}€</div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>budget</div>
             </div>
           </div>
           {shopping.recent_items.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {shopping.recent_items.map((item, i) => (
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, borderTop: "1px solid var(--border)", paddingTop: 5 }}>
+              {shopping.recent_items.slice(0, 3).map((item, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                    {item.name}
-                  </span>
-                  {item.estimated_price && (
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", flexShrink: 0, marginLeft: 8 }}>
-                      {Number(item.estimated_price).toFixed(0)}€
-                    </span>
-                  )}
+                  <span style={{ fontSize: 11, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{item.name}</span>
+                  {item.estimated_price && <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", flexShrink: 0, marginLeft: 6 }}>{Number(item.estimated_price).toFixed(0)}€</span>}
                 </div>
               ))}
             </div>
@@ -996,9 +944,7 @@ function HabitsWidget({ habits: initial }: { habits?: HabitItem[] }) {
   const [habits, setHabits] = useState<HabitItem[]>(initial ?? []);
   const loading = initial === undefined;
 
-  useEffect(() => {
-    if (initial !== undefined) setHabits(initial);
-  }, [initial]);
+  useEffect(() => { if (initial !== undefined) setHabits(initial); }, [initial]);
 
   const toggle = async (id: string, currentlyDone: boolean) => {
     setHabits((prev) => prev.map((h) => h.id === id ? { ...h, completed_today: !currentlyDone } : h));
@@ -1008,11 +954,7 @@ function HabitsWidget({ habits: initial }: { habits?: HabitItem[] }) {
       if (currentlyDone) {
         await fetch(`/api/habits/log?habit_id=${id}&date=${todayStr}`, { method: "DELETE" });
       } else {
-        await fetch("/api/habits/log", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ habit_id: id, completed_date: todayStr }),
-        });
+        await fetch("/api/habits/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ habit_id: id, completed_date: todayStr }) });
       }
     } catch {
       setHabits((prev) => prev.map((h) => h.id === id ? { ...h, completed_today: currentlyDone } : h));
@@ -1024,55 +966,35 @@ function HabitsWidget({ habits: initial }: { habits?: HabitItem[] }) {
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
   return (
-    <Widget title="Habitudes du jour" icon="🎯" action={{ label: "Voir tout →", href: "/habits" }} accent>
+    <Widget title="Habitudes du jour" icon="🎯" action={{ label: "Tout voir →", href: "/habits" }} accent compact>
       {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Skeleton /><Skeleton /><Skeleton />
-        </div>
+        <div style={{ display: "flex", gap: 6 }}><Skeleton height={28} /><Skeleton height={28} /><Skeleton height={28} /></div>
       ) : total === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Aucune habitude prévue aujourd&apos;hui.</p>
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Aucune habitude prévue aujourd&apos;hui.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {/* Progress bar */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12, color: "var(--text-muted)" }}>
-              <span>{doneCount}/{total} complétées</span>
-              <span style={{ fontWeight: 600, color: pct === 100 ? "var(--green)" : "var(--accent)" }}>{pct}%</span>
-            </div>
-            <div style={{ background: "var(--border)", borderRadius: 4, height: 5, overflow: "hidden" }}>
-              <div style={{ width: `${pct}%`, height: "100%", background: pct === 100 ? "var(--green)" : "var(--accent)", borderRadius: 4, transition: "width 0.3s" }} />
-            </div>
-          </div>
-          {/* Habit checkboxes */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Bubble toggles */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>
             {habits.map((h) => (
-              <div key={h.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button
-                  onClick={() => toggle(h.id, h.completed_today)}
-                  style={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: "50%",
-                    border: `2px solid ${h.color || "var(--accent)"}`,
-                    background: h.completed_today ? (h.color || "var(--accent)") : "transparent",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    transition: "background 0.2s",
-                  }}
-                >
-                  {h.completed_today && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </button>
-                <span style={{ fontSize: 13, color: h.completed_today ? "var(--text-muted)" : "var(--text)", textDecoration: h.completed_today ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {h.icon ? `${h.icon} ` : ""}{h.name}
-                </span>
-              </div>
+              <button key={h.id} onClick={() => toggle(h.id, h.completed_today)} title={h.name} style={{
+                width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                border: `2px solid ${h.color || "var(--accent)"}`,
+                background: h.completed_today ? (h.color || "var(--accent)") : "transparent",
+                fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                opacity: h.completed_today ? 1 : 0.5,
+                transition: "background 0.18s, opacity 0.18s",
+              }}>
+                {h.icon || h.name[0]}
+              </button>
             ))}
+          </div>
+          {/* Progress */}
+          <div style={{ flexShrink: 0, textAlign: "right", minWidth: 60 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "var(--font-mono)", color: pct === 100 ? "var(--green)" : "var(--accent)" }}>{pct}%</div>
+            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{doneCount}/{total}</div>
+            <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: pct === 100 ? "var(--green)" : "var(--accent)", borderRadius: 2, transition: "width 0.3s" }} />
+            </div>
           </div>
         </div>
       )}
@@ -1086,43 +1008,166 @@ function JournalWidget({ items }: { items?: JournalReviewItem[] }) {
   const loading = items === undefined;
 
   function getReviewBadge(dateStr: string): { label: string; color: string } {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = dateStr.split("-").map(Number);
-    const due = new Date(y, m - 1, d);
-    const diff = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    if (diff < 0) return { label: "En retard", color: "var(--red)" };
-    if (diff === 0) return { label: "Aujourd'hui", color: "var(--accent)" };
-    return { label: `Dans ${diff}j`, color: "var(--text-muted)" };
+    const diff = Math.round((new Date(y, m - 1, d).getTime() - today.getTime()) / 86400000);
+    if (diff < 0) return { label: "Retard", color: "var(--red)" };
+    if (diff === 0) return { label: "Auj.", color: "var(--accent)" };
+    return { label: `J+${diff}`, color: "var(--text-muted)" };
   }
 
   return (
-    <Widget title="Journal — À revoir" icon="📖" action={{ label: "Ouvrir →", href: "/journal" }}>
+    <Widget title="Journal — À revoir" icon="📖" action={{ label: "Ouvrir →", href: "/journal" }} compact>
       {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Skeleton /><Skeleton /><Skeleton />
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}><Skeleton /><Skeleton /><Skeleton /></div>
       ) : items.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>✅ Aucun thread à revoir cette semaine</p>
+        <p style={{ fontSize: 11, color: "var(--text-muted)" }}>✅ Rien à revoir</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {items.map((item) => {
             const badge = getReviewBadge(item.review_date);
             return (
-              <Link
-                key={item.id}
-                href={`/journal?entry=${item.id}`}
-                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, textDecoration: "none" }}
-              >
-                <span style={{ fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                  {item.title}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, flexShrink: 0 }}>
-                  {badge.label}
-                </span>
+              <Link key={item.id} href={`/journal?entry=${item.id}`}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, textDecoration: "none" }}>
+                <span style={{ fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{item.title}</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: badge.color, flexShrink: 0 }}>{badge.label}</span>
               </Link>
             );
           })}
+        </div>
+      )}
+    </Widget>
+  );
+}
+
+// ── Finances widget ───────────────────────────────────────────────────────────
+
+function formatEurWidget(val: number): string {
+  return val.toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+}
+
+function PatrimonySparkline({ data }: { data: { label: string; total: number }[] }) {
+  if (data.length < 2) return null;
+  const vals = data.map((d) => d.total);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = max - min || 1;
+  const W = 200, H = 36;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = H - ((v - min) / range) * (H - 6) - 3;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const polyline = pts.join(" ");
+  const lastY = parseFloat(pts[pts.length - 1].split(",")[1]);
+  const trend = vals[vals.length - 1] >= vals[vals.length - 2];
+  const color = trend ? "#16a34a" : "#dc2626";
+
+  return (
+    <div style={{ position: "relative" }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
+        {/* Gradient fill */}
+        <defs>
+          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <polygon
+          points={`0,${H} ${polyline} ${W},${H}`}
+          fill="url(#sparkGrad)"
+        />
+        <polyline points={polyline} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Last point dot */}
+        <circle cx={W} cy={lastY} r="3.5" fill={color} />
+      </svg>
+      {/* Month labels */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+        {data.map((d, i) => (
+          <span key={i} style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "capitalize" }}>{d.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FinancesWidget({ data }: { data?: FinanceWidgetData | null }) {
+  const loading = data === undefined;
+  const empty = data === null;
+
+  if (loading) {
+    return (
+      <Widget title="Finances" icon="💶" action={{ label: "Finances →", href: "/finances" }} compact>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}><Skeleton height={36} /><Skeleton height={36} /><Skeleton /></div>
+      </Widget>
+    );
+  }
+
+  if (empty || !data) {
+    return (
+      <Widget title="Finances" icon="💶" action={{ label: "Configurer →", href: "/finances" }} compact>
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Aucun compte configuré.</p>
+      </Widget>
+    );
+  }
+
+  const { total_patrimony, assets, debts, patrimony_change, current_month, monthly_patrimony, top_accounts, has_loans } = data;
+  const trend = patrimony_change >= 0;
+  const trendColor = trend ? "var(--green)" : "var(--red)";
+
+  return (
+    <Widget title="Finances" icon="💶" action={{ label: "Finances →", href: "/finances" }} compact>
+      {/* Patrimony + sparkline side by side */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 9, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 2 }}>Patrimoine net</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 800, color: total_patrimony >= 0 ? "var(--text)" : "var(--red)", lineHeight: 1 }}>
+            {formatEurWidget(total_patrimony)}
+          </div>
+          {has_loans ? (
+            <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2, display: "flex", gap: 6 }}>
+              <span>Actifs <strong style={{ color: "var(--green)" }}>{formatEurWidget(assets)}</strong></span>
+              <span>Dettes <strong style={{ color: "var(--red)" }}>{formatEurWidget(debts)}</strong></span>
+            </div>
+          ) : patrimony_change !== 0 ? (
+            <div style={{ fontSize: 10, color: trendColor, fontWeight: 600, marginTop: 2 }}>
+              {trend ? "↑" : "↓"} {formatEurWidget(Math.abs(patrimony_change))} vs M-1
+            </div>
+          ) : null}
+        </div>
+        {monthly_patrimony.length >= 2 && (
+          <div style={{ flexShrink: 0, width: 120 }}>
+            <PatrimonySparkline data={monthly_patrimony} />
+          </div>
+        )}
+      </div>
+
+      {/* Month KPIs */}
+      <div style={{ display: "flex", gap: 0, borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)" }}>
+        {[
+          { label: "Revenus", value: current_month.income, color: "var(--green)" },
+          { label: "Dépenses", value: current_month.expense, color: "var(--red)" },
+          { label: "Épargne", value: current_month.savings_rate, color: "var(--accent)", suffix: "%" },
+        ].map((kpi, i) => (
+          <div key={i} style={{ flex: 1, padding: "6px 8px", textAlign: "center", borderRight: i < 2 ? "1px solid var(--border)" : "none", background: "var(--bg)" }}>
+            <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 12, color: kpi.color }}>
+              {kpi.suffix ? `${kpi.value}${kpi.suffix}` : formatEurWidget(kpi.value)}
+            </div>
+            <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 1 }}>{kpi.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Top accounts */}
+      {top_accounts.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {top_accounts.slice(0, 3).map((a, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 5, height: 5, borderRadius: "50%", background: a.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: "var(--text-muted)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--text)", flexShrink: 0 }}>{formatEurWidget(a.balance)}</span>
+            </div>
+          ))}
         </div>
       )}
     </Widget>
@@ -1136,6 +1181,7 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [calendarEvents, setCalendarEvents] = useState<UnifiedEvent[] | null>(null);
   const [calendarError, setCalendarError] = useState(false);
+  const [financeData, setFinanceData] = useState<FinanceWidgetData | null | undefined>(undefined);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -1151,53 +1197,57 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
       })
       .catch(() => setCalendarError(true));
 
+    fetch("/api/finances/widget")
+      .then((r) => r.json())
+      .then((d) => setFinanceData(d.error ? null : d))
+      .catch(() => setFinanceData(null));
   }, []);
 
   return (
-    <div style={{ padding: "32px 36px", minHeight: "100vh" }}>
+    <div style={{ padding: "24px 32px", minHeight: "100vh" }}>
       {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>
           {getGreeting()}, {userName} !
         </h1>
-        <p style={{ fontSize: 14, color: "var(--text-muted)", textTransform: "capitalize" }}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", textTransform: "capitalize" }}>
           {formatDateFR(new Date())}
         </p>
       </div>
 
-      {/* Grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 20,
-        }}
-      >
-        {/* Calendrier — full width (col span 3) */}
-        <div style={{ gridColumn: "span 3" }}>
+      {/* Grid — 4 columns */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+
+        {/* Calendrier — full width */}
+        <div style={{ gridColumn: "span 4" }}>
           <CalendarWidget events={calendarEvents} error={calendarError} />
         </div>
 
-        {/* Habitudes — col span 3 */}
-        <div style={{ gridColumn: "span 3" }}>
+        {/* Habitudes — full width, compact horizontal */}
+        <div style={{ gridColumn: "span 4" }}>
           <HabitsWidget habits={dashboard?.habits} />
         </div>
 
-        {/* Projets — col span 2 */}
+        {/* Finances — span 2 */}
+        <div style={{ gridColumn: "span 2" }}>
+          <FinancesWidget data={financeData} />
+        </div>
+
+        {/* Projets — span 2 */}
         <div style={{ gridColumn: "span 2" }}>
           <ProjectsWidget projects={dashboard?.projects} />
         </div>
 
-        {/* Méditation — col span 1 */}
+        {/* Méditation */}
         <MeditationWidget meditation={dashboard?.meditation} />
 
-        {/* Lecture — col span 1 */}
+        {/* Lecture */}
         <ReadingWidget books={dashboard?.books_reading} />
 
-        {/* Shopping — col span 1 */}
+        {/* Shopping */}
         <ShoppingWidget shopping={dashboard?.shopping} />
 
-        {/* Journal — col span 1 */}
+        {/* Journal */}
         <JournalWidget items={dashboard?.journal_review} />
       </div>
     </div>
@@ -1208,13 +1258,27 @@ export default function DashboardWidgets({ userName }: { userName: string }) {
 
 const widgetStyle: React.CSSProperties = {
   background: "var(--surface)",
-  borderRadius: 14,
-  padding: "20px 22px",
+  borderRadius: 12,
+  padding: "16px 18px",
   boxShadow: "var(--shadow-sm)",
   border: "1.5px solid var(--border)",
   display: "flex",
   flexDirection: "column",
-  gap: 14,
+  gap: 12,
+  height: "100%",
+  overflow: "hidden",
+  minWidth: 0,
+};
+
+const compactWidgetStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  borderRadius: 10,
+  padding: "11px 13px",
+  boxShadow: "var(--shadow-sm)",
+  border: "1.5px solid var(--border)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
   height: "100%",
   overflow: "hidden",
   minWidth: 0,
@@ -1222,6 +1286,14 @@ const widgetStyle: React.CSSProperties = {
 
 const widgetTitleStyle: React.CSSProperties = {
   fontSize: 11,
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  color: "var(--text-muted)",
+};
+
+const compactWidgetTitleStyle: React.CSSProperties = {
+  fontSize: 10,
   fontWeight: 600,
   textTransform: "uppercase",
   letterSpacing: "0.08em",
