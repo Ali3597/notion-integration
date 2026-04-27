@@ -285,6 +285,8 @@ export const finance_transactions = pgTable("finance_transactions", {
   type: text("type").notNull(), // "income" | "expense"
   date: date("date").notNull(),
   notes: text("notes"),
+  account_id: uuid("account_id").references(() => finance_accounts.id, { onDelete: "set null" }),
+  to_account_id: uuid("to_account_id").references(() => finance_accounts.id, { onDelete: "set null" }),
   recurring_id: uuid("recurring_id").references(() => finance_recurring.id, { onDelete: "set null" }),
   created_at: timestamp("created_at").defaultNow(),
 });
@@ -295,14 +297,6 @@ export const finance_accounts = pgTable("finance_accounts", {
   type: text("type").notNull().default("savings"), // "savings" | "investment" | "checking"
   institution: text("institution"),
   color: text("color").notNull().default("#3b7ef8"),
-  created_at: timestamp("created_at").defaultNow(),
-});
-
-export const finance_account_snapshots = pgTable("finance_account_snapshots", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  account_id: uuid("account_id").references(() => finance_accounts.id, { onDelete: "cascade" }).notNull(),
-  balance: numeric("balance").notNull(),
-  date: date("date").notNull(),
-  note: text("note"),
+  initial_balance: numeric("initial_balance").notNull().default("0"),
   created_at: timestamp("created_at").defaultNow(),
 });

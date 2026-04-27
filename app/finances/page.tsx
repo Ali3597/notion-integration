@@ -30,6 +30,12 @@ interface Transaction {
   date: string;
   notes: string | null;
   recurring_id: string | null;
+  account_id: string | null;
+  account_name: string | null;
+  account_color: string | null;
+  to_account_id: string | null;
+  to_account_name: string | null;
+  to_account_color: string | null;
   category_id: string | null;
   category_name: string | null;
   category_color: string | null;
@@ -49,16 +55,8 @@ interface Account {
   type: string;
   institution: string | null;
   color: string;
-  latest_balance: string | null;
-  latest_date: string | null;
-}
-
-interface Snapshot {
-  id: string;
-  account_id: string;
-  balance: string;
-  date: string;
-  note: string | null;
+  initial_balance: string;
+  current_balance: string;
 }
 
 interface StatsData {
@@ -67,9 +65,10 @@ interface StatsData {
   dailyData: { date: string; expense: number; income: number }[];
   categoryByMonth: { month: string; cat_id: string; cat_name: string; cat_color: string; cat_icon: string; total: number }[];
   byDayOfWeek: { day: string; total: number; count: number }[];
-  accounts: { id: string; name: string; type: string; color: string; latest_balance: number; snapshots: { date: string; balance: number }[] }[];
+  accounts: { id: string; name: string; type: string; color: string; initial_balance: number; current_balance: number; timeline: { date: string; balance: number }[] }[];
   totalPatrimony: number;
   patrimonyTimeline: { date: string; total: number }[];
+  savingsInflows: { label: string; yearMonth: string; total: number }[];
   trends: { expense_vs_prev: number; income_vs_prev: number; savings_vs_prev: number; patrimony_trend: number };
 }
 
@@ -107,6 +106,14 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   savings: "Épargne",
   investment: "Investissement",
   checking: "Courant",
+  loan: "Prêt / Dette",
+};
+
+const ACCOUNT_TYPE_COLORS: Record<string, string> = {
+  savings: "#3b7ef8",
+  investment: "#8b5cf6",
+  checking: "#16a34a",
+  loan: "#ef4444",
 };
 
 const CAT_TYPE_LABELS: Record<string, string> = {
@@ -172,16 +179,6 @@ const btnGhost: React.CSSProperties = {
   fontWeight: 500, fontSize: 14, border: "1.5px solid var(--border)",
   cursor: "pointer", fontFamily: "inherit",
   transition: "background 0.15s, color 0.15s",
-};
-
-// Danger — destructive secondary
-const btnDanger: React.CSSProperties = {
-  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-  padding: "8px 14px", borderRadius: 10,
-  background: "rgba(220,38,38,0.07)", color: "var(--red)",
-  fontWeight: 500, fontSize: 13, border: "1.5px solid rgba(220,38,38,0.2)",
-  cursor: "pointer", fontFamily: "inherit",
-  whiteSpace: "nowrap",
 };
 
 // Icon — square icon-only button
@@ -340,32 +337,65 @@ function FormFooter({ onCancel, onSave, saveLabel = "Enregistrer" }: { onCancel:
   );
 }
 
-// ── Type Toggle ────────────────────────────────────────────────────────────────
+// ── Type Selector (4 types) ────────────────────────────────────────────────────
 
-function TypeToggle({ value, onChange }: { value: "income" | "expense"; onChange: (v: "income" | "expense") => void }) {
+type TxType = "income" | "expense" | "transfer" | "adjustment" | "loan_payment";
+
+const TX_TYPE_CONFIG: Record<TxType, { label: string; color: string; bg: string }> = {
+  expense:      { label: "🔴 Dépense",       color: "#dc2626", bg: "rgba(220,38,38,0.08)" },
+  income:       { label: "💚 Revenu",        color: "#16a34a", bg: "rgba(22,163,74,0.08)" },
+  transfer:     { label: "🔄 Virement",      color: "#6366f1", bg: "rgba(99,102,241,0.08)" },
+  adjustment:   { label: "⚙️ Ajustement",   color: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
+  loan_payment: { label: "🏦 Rembt. prêt",  color: "#ef4444", bg: "rgba(239,68,68,0.08)" },
+};
+
+const TX_TYPES_ORDER: TxType[] = ["expense", "income", "loan_payment", "transfer", "adjustment"];
+
+function TxTypeSelector({ value, onChange }: { value: TxType; onChange: (v: TxType) => void }) {
   return (
-    <div style={{
-      display: "flex", gap: 0, border: "1.5px solid var(--border)", borderRadius: 10, overflow: "hidden",
-      background: "var(--bg)",
-    }}>
-      {(["expense", "income"] as const).map((t) => {
-        const active = value === t;
-        const col = t === "income" ? "#16a34a" : "#dc2626";
-        const bg = t === "income" ? "rgba(22,163,74,0.1)" : "rgba(220,38,38,0.1)";
-        return (
-          <button key={t} onClick={() => onChange(t)} style={{
-            flex: 1, padding: "9px 0", border: "none",
-            background: active ? bg : "transparent",
-            color: active ? col : "var(--text-muted)",
-            fontWeight: active ? 700 : 400, fontSize: 14,
-            cursor: "pointer", fontFamily: "inherit",
-            transition: "background 0.15s, color 0.15s",
-            borderRight: t === "expense" ? "1px solid var(--border)" : "none",
-          }}>
-            {t === "income" ? "💚 Revenu" : "🔴 Dépense"}
-          </button>
-        );
-      })}
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {/* Row 1: main types */}
+      <div style={{ display: "flex", gap: 0, border: "1.5px solid var(--border)", borderRadius: 10, overflow: "hidden", background: "var(--bg)" }}>
+        {(["expense", "income", "loan_payment"] as TxType[]).map((t, i) => {
+          const active = value === t;
+          const { label, color, bg } = TX_TYPE_CONFIG[t];
+          return (
+            <button key={t} onClick={() => onChange(t)} style={{
+              flex: 1, padding: "9px 4px", border: "none",
+              background: active ? bg : "transparent",
+              color: active ? color : "var(--text-muted)",
+              fontWeight: active ? 700 : 400, fontSize: 12,
+              cursor: "pointer", fontFamily: "inherit",
+              transition: "background 0.15s, color 0.15s",
+              borderRight: i < 2 ? "1px solid var(--border)" : "none",
+              whiteSpace: "nowrap",
+            }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {/* Row 2: utility types */}
+      <div style={{ display: "flex", gap: 0, border: "1.5px solid var(--border)", borderRadius: 10, overflow: "hidden", background: "var(--bg)" }}>
+        {(["transfer", "adjustment"] as TxType[]).map((t, i) => {
+          const active = value === t;
+          const { label, color, bg } = TX_TYPE_CONFIG[t];
+          return (
+            <button key={t} onClick={() => onChange(t)} style={{
+              flex: 1, padding: "8px 4px", border: "none",
+              background: active ? bg : "transparent",
+              color: active ? color : "var(--text-muted)",
+              fontWeight: active ? 700 : 400, fontSize: 12,
+              cursor: "pointer", fontFamily: "inherit",
+              transition: "background 0.15s, color 0.15s",
+              borderRight: i < 1 ? "1px solid var(--border)" : "none",
+              whiteSpace: "nowrap",
+            }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -402,22 +432,25 @@ function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => 
 
 // ── Tab: Mois ──────────────────────────────────────────────────────────────────
 
-function MonthTab({ categories }: { categories: Category[] }) {
+function MonthTab({ categories, accounts }: { categories: Category[]; accounts: Account[] }) {
   const [month, setMonth] = useState(currentMonth());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<MonthStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
-  const [typeFilter, setTypeFilter] = useState<"" | "income" | "expense">("");
+  const [typeFilter, setTypeFilter] = useState<"" | "income" | "expense" | "transfer" | "adjustment" | "loan_payment">("");
 
   const form = {
     amount: useState(""),
     description: useState(""),
     category_id: useState(""),
-    type: useState<"income" | "expense">("expense"),
+    type: useState<TxType>("expense"),
     date: useState(todayISO()),
     notes: useState(""),
+    account_id: useState(""),
+    to_account_id: useState(""),
+    new_balance: useState(""), // for adjustment: user enters target balance
   };
 
   const load = useCallback(async () => {
@@ -431,9 +464,10 @@ function MonthTab({ categories }: { categories: Category[] }) {
 
   useEffect(() => { load(); }, [load]);
 
-function openAdd() {
+  function openAdd() {
     form.amount[1](""); form.description[1](""); form.category_id[1]("");
     form.type[1]("expense"); form.date[1](todayISO()); form.notes[1]("");
+    form.account_id[1](""); form.to_account_id[1](""); form.new_balance[1]("");
     setShowAdd(true);
   }
 
@@ -442,17 +476,52 @@ function openAdd() {
     form.amount[1](tx.amount);
     form.description[1](tx.description);
     form.category_id[1](tx.category_id ?? "");
-    form.type[1](tx.type as "income" | "expense");
+    form.type[1](tx.type as TxType);
     form.date[1](tx.date);
     form.notes[1](tx.notes ?? "");
+    form.account_id[1](tx.account_id ?? "");
+    form.to_account_id[1](tx.to_account_id ?? "");
+    form.new_balance[1]("");
   }
 
   async function save() {
-    const body = {
-      amount: form.amount[0], description: form.description[0],
-      category_id: form.category_id[0] || null, type: form.type[0],
-      date: form.date[0], notes: form.notes[0] || null,
-    };
+    const txType = form.type[0];
+    let body: Record<string, unknown>;
+
+    if (txType === "transfer" || txType === "loan_payment") {
+      body = {
+        type: txType,
+        amount: form.amount[0],
+        account_id: form.account_id[0] || null,
+        to_account_id: form.to_account_id[0] || null,
+        date: form.date[0],
+        notes: form.notes[0] || null,
+        description: form.description[0].trim() || (txType === "loan_payment" ? "Remboursement prêt" : "Virement"),
+        category_id: txType === "loan_payment" ? (form.category_id[0] || null) : null,
+      };
+    } else if (txType === "adjustment") {
+      // Compute delta: new_balance - current account balance
+      const acct = accounts.find((a) => a.id === form.account_id[0]);
+      const currentBal = acct ? parseFloat(acct.current_balance) : 0;
+      const newBal = parseFloat(form.new_balance[0]);
+      const delta = newBal - currentBal;
+      body = {
+        type: "adjustment",
+        amount: delta.toFixed(2),
+        account_id: form.account_id[0] || null,
+        date: form.date[0],
+        notes: form.notes[0] || null,
+        description: "Ajustement de solde",
+      };
+    } else {
+      body = {
+        amount: form.amount[0], description: form.description[0],
+        category_id: form.category_id[0] || null, type: txType,
+        date: form.date[0], notes: form.notes[0] || null,
+        account_id: form.account_id[0] || null,
+      };
+    }
+
     if (editTx) {
       await fetch(`/api/finances/transactions?id=${editTx.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -478,40 +547,157 @@ function openAdd() {
     return transactions.filter((t) => t.type === typeFilter);
   }, [transactions, typeFilter]);
 
-  const catOptions = categories.filter((c) => !form.type[0] || c.type === form.type[0] || c.type === "both");
+  const txType = form.type[0];
+  const catOptions = categories.filter((c) => !txType || c.type === txType || c.type === "both");
+  const selectedAcct = accounts.find((a) => a.id === form.account_id[0]);
 
-  function TxForm({ onClose }: { onClose: () => void }) {
-    return (
-      <>
-        <Field label="Type">
-          <TypeToggle value={form.type[0]} onChange={form.type[1]} />
-        </Field>
-        <Field label="Montant (€)">
-          <input style={inputStyle} type="number" min="0" step="0.01" value={form.amount[0]}
-            onChange={(e) => form.amount[1](e.target.value)} placeholder="0,00" />
-        </Field>
-        <Field label="Description">
-          <input style={inputStyle} value={form.description[0]}
-            onChange={(e) => form.description[1](e.target.value)} placeholder="Libellé de la transaction" />
-        </Field>
-        <Field label="Catégorie">
-          <select style={selectStyle} value={form.category_id[0]} onChange={(e) => form.category_id[1](e.target.value)}>
-            <option value="">Sans catégorie</option>
-            {catOptions.map((c) => (
-              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Date">
-          <input style={inputStyle} type="date" value={form.date[0]} onChange={(e) => form.date[1](e.target.value)} />
-        </Field>
-        <Field label="Notes">
-          <input style={inputStyle} value={form.notes[0]} onChange={(e) => form.notes[1](e.target.value)} placeholder="Optionnel" />
-        </Field>
-        <FormFooter onCancel={onClose} onSave={save} />
-      </>
-    );
-  }
+  const txFormJSX = (onClose: () => void) => (
+    <>
+      <Field label="Type">
+        <TxTypeSelector value={txType} onChange={form.type[1]} />
+      </Field>
+
+      {/* ── Remboursement prêt ── */}
+      {txType === "loan_payment" && (
+        <>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "8px 12px", marginBottom: 14, lineHeight: 1.5 }}>
+            💡 Compte comme <strong>dépense</strong> dans vos stats et réduit automatiquement le solde du prêt.
+          </div>
+          <Field label="Compte débiteur (ex. courant)">
+            <select style={selectStyle} value={form.account_id[0]} onChange={(e) => form.account_id[1](e.target.value)}>
+              <option value="">Choisir un compte…</option>
+              {accounts.filter((a) => a.type !== "loan").map((a) => (
+                <option key={a.id} value={a.id}>{a.name} — {formatEur(a.current_balance)}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Prêt remboursé">
+            <select style={selectStyle} value={form.to_account_id[0]} onChange={(e) => form.to_account_id[1](e.target.value)}>
+              <option value="">Choisir un prêt…</option>
+              {accounts.filter((a) => a.type === "loan").map((a) => (
+                <option key={a.id} value={a.id}>{a.name} — {formatEur(a.current_balance)}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Montant remboursé (€)">
+            <input style={inputStyle} type="number" min="0" step="0.01" value={form.amount[0]}
+              onChange={(e) => form.amount[1](e.target.value)} placeholder="0,00" />
+          </Field>
+          <Field label="Description">
+            <input style={inputStyle} value={form.description[0]}
+              onChange={(e) => form.description[1](e.target.value)} placeholder="ex. Mensualité crédit immobilier" />
+          </Field>
+          <Field label="Catégorie">
+            <select style={selectStyle} value={form.category_id[0]} onChange={(e) => form.category_id[1](e.target.value)}>
+              <option value="">Sans catégorie</option>
+              {categories.filter((c) => c.type === "expense" || c.type === "both").map((c) => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </select>
+          </Field>
+        </>
+      )}
+
+      {/* ── Virement ── */}
+      {txType === "transfer" && (
+        <>
+          <Field label="Compte source">
+            <select style={selectStyle} value={form.account_id[0]} onChange={(e) => form.account_id[1](e.target.value)}>
+              <option value="">Choisir un compte…</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name} — {formatEur(a.current_balance)}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Compte destination">
+            <select style={selectStyle} value={form.to_account_id[0]} onChange={(e) => form.to_account_id[1](e.target.value)}>
+              <option value="">Choisir un compte…</option>
+              {accounts.filter((a) => a.id !== form.account_id[0]).map((a) => (
+                <option key={a.id} value={a.id}>{a.name} — {formatEur(a.current_balance)}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Montant (€)">
+            <input style={inputStyle} type="number" min="0" step="0.01" value={form.amount[0]}
+              onChange={(e) => form.amount[1](e.target.value)} placeholder="0,00" />
+          </Field>
+        </>
+      )}
+
+      {/* ── Ajustement ── */}
+      {txType === "adjustment" && (
+        <>
+          <Field label="Compte à ajuster">
+            <select style={selectStyle} value={form.account_id[0]} onChange={(e) => form.account_id[1](e.target.value)}>
+              <option value="">Choisir un compte…</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name} — {formatEur(a.current_balance)}</option>
+              ))}
+            </select>
+          </Field>
+          {selectedAcct && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -10, marginBottom: 12, paddingLeft: 2 }}>
+              Solde actuel : <strong style={{ fontFamily: "var(--font-mono)" }}>{formatEur(selectedAcct.current_balance)}</strong>
+            </div>
+          )}
+          <Field label="Nouveau solde (€)">
+            <input style={inputStyle} type="number" step="0.01" value={form.new_balance[0]}
+              onChange={(e) => form.new_balance[1](e.target.value)}
+              placeholder={selectedAcct ? String(parseFloat(selectedAcct.current_balance).toFixed(2)) : "0,00"} />
+          </Field>
+          {selectedAcct && form.new_balance[0] !== "" && (
+            <div style={{ fontSize: 12, marginTop: -10, marginBottom: 12, paddingLeft: 2 }}>
+              {(() => {
+                const delta = parseFloat(form.new_balance[0]) - parseFloat(selectedAcct.current_balance);
+                return <span style={{ color: delta >= 0 ? "var(--green)" : "var(--red)", fontWeight: 600 }}>
+                  Écart : {delta >= 0 ? "+" : ""}{formatEur(delta)}
+                </span>;
+              })()}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Revenu / Dépense ── */}
+      {(txType === "income" || txType === "expense") && (
+        <>
+          <Field label="Montant (€)">
+            <input style={inputStyle} type="number" min="0" step="0.01" value={form.amount[0]}
+              onChange={(e) => form.amount[1](e.target.value)} placeholder="0,00" />
+          </Field>
+          <Field label="Description">
+            <input style={inputStyle} value={form.description[0]}
+              onChange={(e) => form.description[1](e.target.value)} placeholder="Libellé de la transaction" />
+          </Field>
+          <Field label="Catégorie">
+            <select style={selectStyle} value={form.category_id[0]} onChange={(e) => form.category_id[1](e.target.value)}>
+              <option value="">Sans catégorie</option>
+              {catOptions.map((c) => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Compte">
+            <select style={selectStyle} value={form.account_id[0]} onChange={(e) => form.account_id[1](e.target.value)}>
+              <option value="">Aucun compte</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name} — {formatEur(a.current_balance)}</option>
+              ))}
+            </select>
+          </Field>
+        </>
+      )}
+
+      {/* ── Common fields ── */}
+      <Field label="Date">
+        <input style={inputStyle} type="date" value={form.date[0]} onChange={(e) => form.date[1](e.target.value)} />
+      </Field>
+      <Field label="Notes">
+        <input style={inputStyle} value={form.notes[0]} onChange={(e) => form.notes[1](e.target.value)} placeholder="Optionnel" />
+      </Field>
+      <FormFooter onCancel={onClose} onSave={save} />
+    </>
+  );
 
   return (
     <div>
@@ -535,9 +721,9 @@ function openAdd() {
       )}
 
       {/* Type filter pills */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {([["", "Toutes"], ["income", "Revenus"], ["expense", "Dépenses"]] as const).map(([v, l]) => (
-          <button key={v} onClick={() => setTypeFilter(v as "" | "income" | "expense")}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {([["", "Toutes"], ["income", "💚 Revenus"], ["expense", "🔴 Dépenses"], ["loan_payment", "🏦 Prêts"], ["transfer", "🔄 Virements"], ["adjustment", "⚙️ Ajustements"]] as const).map(([v, l]) => (
+          <button key={v} onClick={() => setTypeFilter(v as "" | "income" | "expense" | "transfer" | "adjustment" | "loan_payment")}
             style={pillStyle(typeFilter === v)}>
             {l}
           </button>
@@ -556,43 +742,133 @@ function openAdd() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          {filtered.map((tx) => (
-            <div key={tx.id} style={{
-              display: "flex", alignItems: "center", gap: 12,
-              background: "var(--surface)", border: "1.5px solid var(--border)",
-              borderRadius: 11, padding: "10px 14px",
-              borderLeft: `3px solid ${tx.category_color ?? (tx.type === "income" ? "var(--green)" : "var(--red)")}`,
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                  {tx.category_icon && <span style={{ fontSize: 16 }}>{tx.category_icon}</span>}
-                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.description}</span>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                  {tx.category_name ?? "Sans catégorie"} · {formatDate(tx.date)}
-                </div>
-              </div>
-              <div style={{
-                fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, flexShrink: 0,
-                color: tx.type === "income" ? "var(--green)" : "var(--red)",
+          {filtered.map((tx) => {
+            const isTransfer = tx.type === "transfer";
+            const isAdjust = tx.type === "adjustment";
+            const isLoanPayment = tx.type === "loan_payment";
+            const amt = parseFloat(tx.amount);
+            const borderColor = isTransfer ? "#6366f1" : isAdjust ? "#f59e0b" : isLoanPayment ? "#ef4444"
+              : tx.category_color ?? (tx.type === "income" ? "var(--green)" : "var(--red)");
+            const amtColor = isTransfer ? "#6366f1" : isAdjust
+              ? (amt >= 0 ? "var(--green)" : "var(--red)")
+              : tx.type === "income" ? "var(--green)" : "var(--red)";
+            const amtPrefix = isTransfer ? "" : isAdjust ? (amt >= 0 ? "+" : "") : tx.type === "income" ? "+" : "−";
+            return (
+              <div key={tx.id} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                background: "var(--surface)", border: "1.5px solid var(--border)",
+                borderRadius: 11, padding: "10px 14px",
+                borderLeft: `3px solid ${borderColor}`,
               }}>
-                {tx.type === "income" ? "+" : "−"}{formatEur(tx.amount)}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                    {isTransfer ? <span style={{ fontSize: 15 }}>🔄</span>
+                      : isLoanPayment ? <span style={{ fontSize: 15 }}>🏦</span>
+                      : isAdjust ? <span style={{ fontSize: 15 }}>⚙️</span>
+                      : tx.category_icon ? <span style={{ fontSize: 16 }}>{tx.category_icon}</span> : null}
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.description}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                    {isTransfer ? (
+                      <>
+                        <span style={{ color: tx.account_color ?? "#6366f1" }}>{tx.account_name ?? "?"}</span>
+                        {" → "}
+                        <span style={{ color: tx.to_account_color ?? "#6366f1" }}>{tx.to_account_name ?? "?"}</span>
+                        {" · "}{formatDate(tx.date)}
+                      </>
+                    ) : isLoanPayment ? (
+                      <>
+                        <span style={{ color: tx.account_color ?? "var(--text-muted)" }}>{tx.account_name ?? "?"}</span>
+                        {" → "}
+                        <span style={{ color: "var(--red)" }}>{tx.to_account_name ?? "prêt"}</span>
+                        {tx.category_name && <span style={{ color: "var(--text-muted)" }}> · {tx.category_name}</span>}
+                        {" · "}{formatDate(tx.date)}
+                      </>
+                    ) : isAdjust ? (
+                      <>
+                        {tx.account_name && <span style={{ color: tx.account_color ?? "#f59e0b" }}>{tx.account_name}</span>}
+                        {" · "}{formatDate(tx.date)}
+                      </>
+                    ) : (
+                      <>
+                        {tx.category_name ?? "Sans catégorie"} · {formatDate(tx.date)}
+                        {tx.account_name && <span style={{ marginLeft: 6, color: tx.account_color ?? "var(--accent)" }}>· {tx.account_name}</span>}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, flexShrink: 0, color: amtColor }}>
+                  {isTransfer ? "→ " : ""}{amtPrefix}{formatEur(isAdjust ? amt : tx.amount)}
+                </div>
+                <RowActions onEdit={() => openEdit(tx)} onDelete={() => remove(tx.id)} />
               </div>
-              <RowActions onEdit={() => openEdit(tx)} onDelete={() => remove(tx.id)} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {showAdd && (
         <Modal title="Nouvelle transaction" onClose={() => setShowAdd(false)}>
-          <TxForm onClose={() => setShowAdd(false)} />
+          {txFormJSX(() => setShowAdd(false))}
         </Modal>
       )}
       {editTx && (
         <Modal title="Modifier la transaction" onClose={() => setEditTx(null)}>
-          <TxForm onClose={() => setEditTx(null)} />
+          {txFormJSX(() => setEditTx(null))}
         </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── Account Card ───────────────────────────────────────────────────────────────
+
+function AccountCard({ a, onEdit, onDelete }: { a: Account; onEdit: (a: Account) => void; onDelete: (id: string) => void }) {
+  const isLoan = a.type === "loan";
+  const bal = parseFloat(a.current_balance);
+  const balColor = isLoan ? (bal < 0 ? "var(--red)" : "var(--green)") : a.color;
+  const pctPaid = isLoan && parseFloat(a.initial_balance) !== 0
+    ? Math.max(0, Math.min(100, ((parseFloat(a.initial_balance) - bal) / Math.abs(parseFloat(a.initial_balance))) * 100))
+    : null;
+
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: 18,
+      borderLeft: `4px solid ${isLoan ? "var(--red)" : a.color}`, boxShadow: "var(--shadow-sm)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{a.name}</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+            {ACCOUNT_TYPE_LABELS[a.type] ?? a.type}{a.institution ? ` · ${a.institution}` : ""}
+          </div>
+        </div>
+        <RowActions onEdit={() => onEdit(a)} onDelete={() => onDelete(a.id)} />
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 800, fontFamily: "var(--font-mono)", color: balColor }}>
+        {formatEur(bal)}
+      </div>
+      {isLoan ? (
+        <>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+            Emprunt initial : {formatEur(a.initial_balance)}
+          </div>
+          {pctPaid !== null && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
+                <span>Remboursé</span>
+                <span style={{ fontWeight: 600, color: "var(--green)" }}>{pctPaid.toFixed(0)} %</span>
+              </div>
+              <div style={{ height: 5, background: "rgba(220,38,38,0.15)", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pctPaid}%`, background: "var(--green)", borderRadius: 3, transition: "width 0.4s" }} />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+          Solde de départ : {formatEur(a.initial_balance)}
+        </div>
       )}
     </div>
   );
@@ -604,39 +880,28 @@ function AccountsTab() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editAccount, setEditAccount] = useState<Account | null>(null);
-  const [openSnapAccount, setOpenSnapAccount] = useState<Account | null>(null);
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [showAddSnap, setShowAddSnap] = useState(false);
 
   const form = {
     name: useState(""),
     type: useState("savings"),
     institution: useState(""),
     color: useState("#3b7ef8"),
-  };
-
-  const snapForm = {
-    balance: useState(""),
-    date: useState(todayISO()),
-    note: useState(""),
+    initial_balance: useState(""),
   };
 
   const load = useCallback(async () => {
     const r = await fetch("/api/finances/accounts");
-    setAccounts(await r.json());
+    const data = await r.json();
+    setAccounts(Array.isArray(data) ? data : []);
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  const loadSnaps = useCallback(async (accountId: string) => {
-    const r = await fetch(`/api/finances/accounts/snapshots?account_id=${accountId}`);
-    setSnapshots(await r.json());
-  }, []);
 
   async function saveAccount() {
     const body = {
       name: form.name[0], type: form.type[0],
       institution: form.institution[0] || null, color: form.color[0],
+      initial_balance: form.initial_balance[0] || "0",
     };
     if (editAccount) {
       await fetch(`/api/finances/accounts?id=${editAccount.id}`, {
@@ -653,28 +918,8 @@ function AccountsTab() {
   }
 
   async function removeAccount(id: string) {
-    if (!confirm("Supprimer ce compte et tout son historique ?")) return;
+    if (!confirm("Supprimer ce compte ? Les transactions liées seront déliées.")) return;
     await fetch(`/api/finances/accounts?id=${id}`, { method: "DELETE" });
-    load();
-  }
-
-  async function saveSnap() {
-    await fetch("/api/finances/accounts/snapshots", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        account_id: openSnapAccount!.id,
-        balance: snapForm.balance[0], date: snapForm.date[0], note: snapForm.note[0] || null,
-      }),
-    });
-    setShowAddSnap(false);
-    snapForm.balance[1](""); snapForm.note[1](""); snapForm.date[1](todayISO());
-    loadSnaps(openSnapAccount!.id);
-    load();
-  }
-
-  async function removeSnap(id: string) {
-    await fetch(`/api/finances/accounts/snapshots?id=${id}`, { method: "DELETE" });
-    loadSnaps(openSnapAccount!.id);
     load();
   }
 
@@ -682,190 +927,111 @@ function AccountsTab() {
     setEditAccount(a);
     form.name[1](a.name); form.type[1](a.type);
     form.institution[1](a.institution ?? ""); form.color[1](a.color);
+    form.initial_balance[1](a.initial_balance ?? "0");
   }
 
-  const totalPatrimony = accounts.reduce((s, a) => s + (a.latest_balance ? parseFloat(a.latest_balance) : 0), 0);
+  const assetAccounts = accounts.filter((a) => a.type !== "loan");
+  const loanAccounts = accounts.filter((a) => a.type === "loan");
+  const totalAssets = assetAccounts.reduce((s, a) => s + parseFloat(a.current_balance ?? "0"), 0);
+  const totalDebts = loanAccounts.reduce((s, a) => s + parseFloat(a.current_balance ?? "0"), 0);
+  const totalPatrimony = totalAssets + totalDebts;
 
-  function AccountForm({ onClose }: { onClose: () => void }) {
-    return (
-      <>
-        <Field label="Nom">
-          <input style={inputStyle} value={form.name[0]} onChange={(e) => form.name[1](e.target.value)} placeholder="ex. Livret A, CTO Boursorama…" />
-        </Field>
-        <Field label="Type">
-          <select style={selectStyle} value={form.type[0]} onChange={(e) => form.type[1](e.target.value)}>
-            <option value="savings">Épargne</option>
-            <option value="investment">Investissement</option>
-            <option value="checking">Courant</option>
-          </select>
-        </Field>
-        <Field label="Établissement">
-          <input style={inputStyle} value={form.institution[0]} onChange={(e) => form.institution[1](e.target.value)} placeholder="ex. BNP, Boursorama, Fortuneo…" />
-        </Field>
-        <Field label="Couleur">
-          <ColorPicker value={form.color[0]} onChange={form.color[1]} />
-        </Field>
-        <FormFooter onCancel={onClose} onSave={saveAccount} />
-      </>
-    );
-  }
-
-  const snapChartData = useMemo(() => {
-    return [...snapshots].reverse().map((s) => ({
-      date: formatDate(s.date),
-      balance: parseFloat(s.balance),
-    }));
-  }, [snapshots]);
+  const accountFormJSX = (onClose: () => void) => (
+    <>
+      <Field label="Nom">
+        <input style={inputStyle} value={form.name[0]} onChange={(e) => form.name[1](e.target.value)} placeholder="ex. Livret A, CTO Boursorama…" />
+      </Field>
+      <Field label="Type">
+        <select style={selectStyle} value={form.type[0]} onChange={(e) => form.type[1](e.target.value)}>
+          <option value="checking">Courant</option>
+          <option value="savings">Épargne</option>
+          <option value="investment">Investissement</option>
+          <option value="loan">Prêt / Dette</option>
+        </select>
+      </Field>
+      {form.type[0] === "loan" && (
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -10, marginBottom: 12, paddingLeft: 2, lineHeight: 1.5 }}>
+          Entrez un montant <strong>négatif</strong> pour représenter ce que vous devez encore.<br />
+          Ex : <span style={{ fontFamily: "var(--font-mono)" }}>-15000</span> pour un prêt de 15 000 €.
+        </div>
+      )}
+      <Field label={form.type[0] === "loan" ? "Capital restant dû (€)" : "Solde de départ (€)"}>
+        <input style={inputStyle} type="number" step="0.01" value={form.initial_balance[0]}
+          onChange={(e) => form.initial_balance[1](e.target.value)}
+          placeholder={form.type[0] === "loan" ? "-15000" : "0,00"} />
+      </Field>
+      <Field label="Établissement">
+        <input style={inputStyle} value={form.institution[0]} onChange={(e) => form.institution[1](e.target.value)} placeholder="ex. BNP, Boursorama, Fortuneo…" />
+      </Field>
+      <Field label="Couleur">
+        <ColorPicker value={form.color[0]} onChange={form.color[1]} />
+      </Field>
+      <FormFooter onCancel={onClose} onSave={saveAccount} />
+    </>
+  );
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-        <KpiCard label="Patrimoine total" value={formatEur(totalPatrimony)} color="var(--accent)" />
-        <button onClick={() => { form.name[1](""); form.type[1]("savings"); form.institution[1](""); form.color[1]("#3b7ef8"); setShowAdd(true); }}
+        <KpiCard label="Patrimoine net" value={formatEur(totalPatrimony)} color={totalPatrimony >= 0 ? "var(--accent)" : "var(--red)"} />
+        {loanAccounts.length > 0 && (
+          <>
+            <KpiCard label="Actifs" value={formatEur(totalAssets)} color="var(--green)" />
+            <KpiCard label="Dettes" value={formatEur(totalDebts)} color="var(--red)" />
+          </>
+        )}
+        <button onClick={() => { form.name[1](""); form.type[1]("checking"); form.institution[1](""); form.color[1]("#3b7ef8"); form.initial_balance[1](""); setShowAdd(true); }}
           className="btn-primary" style={{ ...btnPrimary, marginLeft: "auto" }}>
           <IconPlus /> Compte
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-        {accounts.map((a) => (
-          <div key={a.id} style={{
-            background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: 18,
-            borderLeft: `4px solid ${a.color}`, boxShadow: "var(--shadow-sm)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{a.name}</div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                  {ACCOUNT_TYPE_LABELS[a.type] ?? a.type}{a.institution ? ` · ${a.institution}` : ""}
-                </div>
-              </div>
-              <RowActions onEdit={() => openAccEdit(a)} onDelete={() => removeAccount(a.id)} />
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: "var(--font-mono)", color: a.color, marginBottom: 2 }}>
-              {a.latest_balance ? formatEur(a.latest_balance) : "—"}
-            </div>
-            {a.latest_date && (
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 14 }}>au {formatDate(a.latest_date)}</div>
-            )}
-            <button onClick={() => { setOpenSnapAccount(a); loadSnaps(a.id); setShowAddSnap(false); }} style={{
-              ...btnSecondary, width: "100%", justifyContent: "center",
-            }}>
-              Mettre à jour / Historique
-            </button>
+      {/* Assets */}
+      {assetAccounts.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14, marginBottom: loanAccounts.length > 0 ? 28 : 0 }}>
+          {assetAccounts.map((a) => (
+            <AccountCard key={a.id} a={a} onEdit={openAccEdit} onDelete={removeAccount} />
+          ))}
+        </div>
+      )}
+
+      {/* Loans / Debts */}
+      {loanAccounts.length > 0 && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>Prêts & Dettes</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(220,38,38,0.2)" }} />
           </div>
-        ))}
-        {accounts.length === 0 && (
-          <div style={{
-            color: "var(--text-muted)", fontSize: 14, padding: 32, textAlign: "center",
-            gridColumn: "1/-1", background: "var(--surface)", borderRadius: 12, border: "1px dashed var(--border)",
-          }}>
-            Aucun compte. Ajoutez un Livret A, CTO, PEL…
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+            {loanAccounts.map((a) => (
+              <AccountCard key={a.id} a={a} onEdit={openAccEdit} onDelete={removeAccount} />
+            ))}
           </div>
-        )}
-      </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10, lineHeight: 1.6 }}>
+            💡 <strong>Conseil :</strong> Enregistrez vos remboursements mensuels comme des <strong>Dépenses</strong> (catégorie "Remboursement prêt") pour qu'ils apparaissent dans vos stats.
+            Mettez à jour le solde restant via un <strong>Ajustement</strong>.
+          </div>
+        </>
+      )}
+
+      {accounts.length === 0 && (
+        <div style={{
+          color: "var(--text-muted)", fontSize: 14, padding: 32, textAlign: "center",
+          background: "var(--surface)", borderRadius: 12, border: "1px dashed var(--border)",
+        }}>
+          Aucun compte. Le solde se met à jour automatiquement avec vos transactions.
+        </div>
+      )}
 
       {showAdd && (
         <Modal title="Nouveau compte" onClose={() => setShowAdd(false)}>
-          <AccountForm onClose={() => setShowAdd(false)} />
+          {accountFormJSX(() => setShowAdd(false))}
         </Modal>
       )}
       {editAccount && (
         <Modal title="Modifier le compte" onClose={() => setEditAccount(null)}>
-          <AccountForm onClose={() => setEditAccount(null)} />
+          {accountFormJSX(() => setEditAccount(null))}
         </Modal>
-      )}
-
-      {/* Snapshots side panel */}
-      {openSnapAccount && (
-        <div style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100,
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          backdropFilter: "blur(2px)",
-        }} onClick={() => { setOpenSnapAccount(null); setShowAddSnap(false); }}>
-          <div style={{
-            width: "min(480px, 100vw)", height: "100vh", background: "var(--surface)",
-            borderLeft: "1.5px solid var(--border)", padding: "24px 24px 32px",
-            overflowY: "auto", display: "flex", flexDirection: "column", gap: 20,
-            boxShadow: "-8px 0 32px rgba(0,0,0,0.1)",
-          }} onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{openSnapAccount.name}</h2>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{ACCOUNT_TYPE_LABELS[openSnapAccount.type] ?? openSnapAccount.type}</div>
-              </div>
-              <button onClick={() => { setOpenSnapAccount(null); setShowAddSnap(false); }} style={{ ...btnIcon, width: 34, height: 34 }}>
-                <IconClose />
-              </button>
-            </div>
-
-            {/* Mini chart */}
-            {snapChartData.length > 1 && (
-              <div style={{ height: 140 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={snapChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickFormatter={(v) => `${v.toLocaleString("fr-FR")} €`} width={70} />
-                    <Tooltip formatter={(v: number) => [formatEur(v), "Solde"]} />
-                    <Line type="monotone" dataKey="balance" stroke={openSnapAccount.color} strokeWidth={2.5} dot={{ r: 4, fill: openSnapAccount.color }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* CTA update */}
-            {!showAddSnap ? (
-              <button onClick={() => setShowAddSnap(true)} className="btn-primary" style={btnPrimary}>
-                <IconPlus /> Mettre à jour le solde
-              </button>
-            ) : (
-              <div style={{ background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 12, padding: 16 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Nouveau solde</div>
-                <Field label="Solde (€)">
-                  <input style={inputStyle} type="number" step="0.01" value={snapForm.balance[0]}
-                    onChange={(e) => snapForm.balance[1](e.target.value)} placeholder="0,00" />
-                </Field>
-                <Field label="Date">
-                  <input style={inputStyle} type="date" value={snapForm.date[0]} onChange={(e) => snapForm.date[1](e.target.value)} />
-                </Field>
-                <Field label="Note">
-                  <input style={inputStyle} value={snapForm.note[0]} onChange={(e) => snapForm.note[1](e.target.value)} placeholder="Optionnel" />
-                </Field>
-                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                  <button onClick={() => setShowAddSnap(false)} style={btnGhost}>Annuler</button>
-                  <button onClick={saveSnap} className="btn-primary" style={{ ...btnPrimary, flex: 1 }}>Enregistrer</button>
-                </div>
-              </div>
-            )}
-
-            {/* History */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Historique</div>
-              {snapshots.length === 0 ? (
-                <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Aucun historique.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  {snapshots.map((s) => (
-                    <div key={s.id} style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 9, padding: "9px 12px",
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: 14, color: openSnapAccount.color }}>{formatEur(s.balance)}</div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{formatDate(s.date)}{s.note ? ` · ${s.note}` : ""}</div>
-                      </div>
-                      <button onClick={() => removeSnap(s.id)} style={{ ...btnIcon, color: "var(--red)", borderColor: "rgba(220,38,38,0.2)", background: "rgba(220,38,38,0.05)" }}>
-                        <IconTrash />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
@@ -938,33 +1104,31 @@ function CategoriesTab() {
     load();
   }
 
-  function CatForm({ onClose }: { onClose: () => void }) {
-    return (
-      <>
-        <Field label="Nom">
-          <input style={inputStyle} value={form.name[0]} onChange={(e) => form.name[1](e.target.value)} placeholder="ex. Loyer, Salaire…" />
-        </Field>
-        <Field label="Icône (emoji)">
-          <input style={inputStyle} value={form.icon[0]} onChange={(e) => form.icon[1](e.target.value)} placeholder="💰" />
-        </Field>
-        <Field label="Couleur">
-          <ColorPicker value={form.color[0]} onChange={form.color[1]} />
-        </Field>
-        <Field label="Type de transactions">
-          <select style={selectStyle} value={form.type[0]} onChange={(e) => form.type[1](e.target.value)}>
-            <option value="both">Revenus et dépenses</option>
-            <option value="income">Revenus uniquement</option>
-            <option value="expense">Dépenses uniquement</option>
-          </select>
-        </Field>
-        <Field label="Budget mensuel (€) — optionnel">
-          <input style={inputStyle} type="number" min="0" step="0.01" value={form.budget[0]}
-            onChange={(e) => form.budget[1](e.target.value)} placeholder="ex. 300 €" />
-        </Field>
-        <FormFooter onCancel={onClose} onSave={save} />
-      </>
-    );
-  }
+  const catFormJSX = (onClose: () => void) => (
+    <>
+      <Field label="Nom">
+        <input style={inputStyle} value={form.name[0]} onChange={(e) => form.name[1](e.target.value)} placeholder="ex. Loyer, Salaire…" />
+      </Field>
+      <Field label="Icône (emoji)">
+        <input style={inputStyle} value={form.icon[0]} onChange={(e) => form.icon[1](e.target.value)} placeholder="💰" />
+      </Field>
+      <Field label="Couleur">
+        <ColorPicker value={form.color[0]} onChange={form.color[1]} />
+      </Field>
+      <Field label="Type de transactions">
+        <select style={selectStyle} value={form.type[0]} onChange={(e) => form.type[1](e.target.value)}>
+          <option value="both">Revenus et dépenses</option>
+          <option value="income">Revenus uniquement</option>
+          <option value="expense">Dépenses uniquement</option>
+        </select>
+      </Field>
+      <Field label="Budget mensuel (€) — optionnel">
+        <input style={inputStyle} type="number" min="0" step="0.01" value={form.budget[0]}
+          onChange={(e) => form.budget[1](e.target.value)} placeholder="ex. 300 €" />
+      </Field>
+      <FormFooter onCancel={onClose} onSave={save} />
+    </>
+  );
 
   return (
     <div>
@@ -1011,12 +1175,12 @@ function CategoriesTab() {
 
       {showAdd && (
         <Modal title="Nouvelle catégorie" onClose={() => setShowAdd(false)}>
-          <CatForm onClose={() => setShowAdd(false)} />
+          {catFormJSX(() => setShowAdd(false))}
         </Modal>
       )}
       {editCat && (
         <Modal title="Modifier la catégorie" onClose={() => setEditCat(null)}>
-          <CatForm onClose={() => setEditCat(null)} />
+          {catFormJSX(() => setEditCat(null))}
         </Modal>
       )}
     </div>
@@ -1147,7 +1311,7 @@ function ExpenseHeatmap({ data }: { data: { date: string; expense: number; incom
   );
 }
 
-function StatsTab({ categories }: { categories: Category[] }) {
+function StatsTab({ categories }: { categories: Category[]; accounts?: Account[] }) {
   const [viewMode, setViewMode] = useState<"period" | "month">("period");
 
   // ── Period view state
@@ -1248,15 +1412,22 @@ function StatsTab({ categories }: { categories: Category[] }) {
   // ── Patrimony by account type
   const patrimonyByType = useMemo(() => {
     if (!periodData) return [];
-    const TYPE_COLORS: Record<string, string> = { savings: "#3b7ef8", investment: "#8b5cf6", checking: "#16a34a" };
     const map: Record<string, { total: number; color: string }> = {};
     for (const a of periodData.accounts) {
-      if (!map[a.type]) map[a.type] = { total: 0, color: TYPE_COLORS[a.type] ?? "#888" };
-      map[a.type].total += a.latest_balance;
+      if (!map[a.type]) map[a.type] = { total: 0, color: ACCOUNT_TYPE_COLORS[a.type] ?? a.color ?? "#888" };
+      map[a.type].total += a.current_balance;
     }
     return Object.entries(map).map(([type, { total, color }]) => ({
       type, label: ACCOUNT_TYPE_LABELS[type] ?? type, total, color,
     }));
+  }, [periodData]);
+
+  // ── Net patrimony (assets - debts)
+  const netPatrimony = useMemo(() => {
+    if (!periodData) return null;
+    const assets = periodData.accounts.filter((a) => a.type !== "loan").reduce((s, a) => s + a.current_balance, 0);
+    const debts = periodData.accounts.filter((a) => a.type === "loan").reduce((s, a) => s + a.current_balance, 0);
+    return { assets, debts, net: assets + debts, hasLoans: debts < 0 };
   }, [periodData]);
 
   // ── Month view: projection
@@ -1519,7 +1690,85 @@ function StatsTab({ categories }: { categories: Category[] }) {
               </div>
             )}
 
-            {/* ⑩ Patrimoine */}
+            {/* ⑩ Épargne & Investissements */}
+            {periodData.accounts.filter((a) => a.type === "savings" || a.type === "investment").length > 0 && (
+              <div>
+                <div style={ST}>Épargne & Investissements</div>
+                {/* KPIs par type */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+                  {["savings", "investment"].map((t) => {
+                    const accs = periodData.accounts.filter((a) => a.type === t);
+                    if (accs.length === 0) return null;
+                    const total = accs.reduce((s, a) => s + a.current_balance, 0);
+                    return (
+                      <KpiCard key={t} label={t === "savings" ? "Épargne" : "Investissement"}
+                        value={formatEur(total)}
+                        color={t === "savings" ? "#3b7ef8" : "#8b5cf6"}
+                        sub={`${accs.length} compte${accs.length > 1 ? "s" : ""}`} />
+                    );
+                  })}
+                </div>
+
+                {/* Évolution par compte épargne/investissement */}
+                {periodData.accounts.filter((a) => (a.type === "savings" || a.type === "investment") && a.timeline.length > 1).length > 0 && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>Évolution du solde</div>
+                    <div style={{ height: 220, marginBottom: 20 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                          <XAxis dataKey="date" type="category" allowDuplicatedCategory={false}
+                            tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
+                          <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                            tickFormatter={(v) => `${v.toLocaleString("fr-FR")} €`} width={82} />
+                          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, name: string) => [formatEur(v), name]} />
+                          {periodData.accounts
+                            .filter((a) => (a.type === "savings" || a.type === "investment") && a.timeline.length > 1)
+                            .map((a) => (
+                              <Line key={a.id} data={a.timeline} type="monotone" dataKey="balance"
+                                name={a.name} stroke={a.color} strokeWidth={2.5} dot={false}
+                                activeDot={{ r: 5 }} />
+                            ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* Legend */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginBottom: 20 }}>
+                      {periodData.accounts
+                        .filter((a) => a.type === "savings" || a.type === "investment")
+                        .map((a) => (
+                          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                            <div style={{ width: 10, height: 3, background: a.color, borderRadius: 2 }} />
+                            <span style={{ color: "var(--text-muted)" }}>{a.name}</span>
+                            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: a.color }}>{formatEur(a.current_balance)}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Virements mensuels vers l'épargne */}
+                {periodData.savingsInflows && periodData.savingsInflows.some((s) => s.total > 0) && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10 }}>Virements vers l'épargne par mois</div>
+                    <div style={{ height: 180, marginBottom: 8 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={periodData.savingsInflows} barSize={28}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                          <XAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--text-muted)" }} />
+                          <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                            tickFormatter={(v) => `${v.toLocaleString("fr-FR")} €`} width={82} />
+                          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [formatEur(v), "Virements"]} />
+                          <Bar dataKey="total" name="Virements épargne" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ⑪ Patrimoine */}
             {periodData.accounts.length > 0 && (
               <div>
                 <div style={ST}>Vue Patrimoine</div>
@@ -1527,18 +1776,34 @@ function StatsTab({ categories }: { categories: Category[] }) {
                 {/* Total + donut par type */}
                 <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 24 }}>
                   <div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Total patrimoine</div>
-                    <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--accent)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Patrimoine net</div>
+                    <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "var(--font-mono)", color: netPatrimony && netPatrimony.net >= 0 ? "var(--accent)" : "var(--red)" }}>
                       {formatEur(periodData.totalPatrimony)}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14 }}>
-                      {periodData.accounts.map((a) => (
-                        <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: a.color, flexShrink: 0 }} />
-                          <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>{a.name}</span>
-                          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 13, color: a.color }}>{formatEur(a.latest_balance)}</span>
+                    {netPatrimony?.hasLoans && (
+                      <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+                        <div style={{ fontSize: 12 }}>
+                          <span style={{ color: "var(--text-muted)" }}>Actifs </span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--green)" }}>{formatEur(netPatrimony.assets)}</span>
                         </div>
-                      ))}
+                        <div style={{ fontSize: 12 }}>
+                          <span style={{ color: "var(--text-muted)" }}>Dettes </span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--red)" }}>{formatEur(netPatrimony.debts)}</span>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14 }}>
+                      {periodData.accounts.map((a) => {
+                        const isLoan = a.type === "loan";
+                        const balColor = isLoan ? (a.current_balance < 0 ? "var(--red)" : "var(--green)") : a.color;
+                        return (
+                          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: isLoan ? "var(--red)" : a.color, flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>{a.name}{isLoan ? " 🏦" : ""}</span>
+                            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 13, color: balColor }}>{formatEur(a.current_balance)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   {patrimonyByType.length > 1 && (
@@ -1586,20 +1851,20 @@ function StatsTab({ categories }: { categories: Category[] }) {
                 )}
 
                 {/* Sparklines par compte */}
-                {periodData.accounts.filter((a) => a.snapshots.length > 1).length > 0 && (
+                {periodData.accounts.filter((a) => a.timeline.length > 1).length > 0 && (
                   <>
                     <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>Progression par compte</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-                      {periodData.accounts.filter((a) => a.snapshots.length > 1).map((a) => (
+                      {periodData.accounts.filter((a) => a.timeline.length > 1).map((a) => (
                         <div key={a.id} style={{
                           background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 10,
                           padding: "12px 14px", borderTop: `3px solid ${a.color}`,
                         }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: a.color, marginBottom: 2 }}>{a.name}</div>
-                          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{formatEur(a.latest_balance)}</div>
+                          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{formatEur(a.current_balance)}</div>
                           <div style={{ height: 80 }}>
                             <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={[...a.snapshots].reverse()}>
+                              <LineChart data={a.timeline}>
                                 <Line type="monotone" dataKey="balance" stroke={a.color} strokeWidth={2} dot={false} />
                                 <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [formatEur(v), "Solde"]} />
                               </LineChart>
@@ -1812,6 +2077,7 @@ export default function FinancesPage() {
 
   const [tab, setTab] = useState<Tab>("month");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   useEffect(() => {
     document.title = "Finances — life×hub";
@@ -1826,6 +2092,7 @@ export default function FinancesPage() {
 
   useEffect(() => {
     fetch("/api/finances/categories").then((r) => r.json()).then(setCategories);
+    fetch("/api/finances/accounts").then((r) => r.json()).then((d) => setAccounts(Array.isArray(d) ? d : []));
   }, []);
 
   return (
@@ -1855,10 +2122,10 @@ export default function FinancesPage() {
         ))}
       </div>
 
-      {tab === "month" && <MonthTab categories={categories} />}
+      {tab === "month" && <MonthTab categories={categories} accounts={accounts} />}
       {tab === "accounts" && <AccountsTab />}
       {tab === "categories" && <CategoriesTab />}
-      {tab === "stats" && <StatsTab categories={categories} />}
+      {tab === "stats" && <StatsTab categories={categories} accounts={accounts} />}
     </main>
   );
 }

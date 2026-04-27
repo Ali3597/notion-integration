@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { finance_accounts, finance_account_snapshots } from "@/lib/schema";
+import { finance_accounts } from "@/lib/schema";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const months = parseInt(searchParams.get("months") ?? "6", 10);
 
-    // Build last N months list
     const today = new Date();
     const monthsList: { label: string; yearMonth: string }[] = [];
     for (let i = months - 1; i >= 0; i--) {
@@ -16,10 +15,8 @@ export async function GET(request: Request) {
       const label = d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
       monthsList.push({ label, yearMonth: ym });
     }
-
     const firstDate = monthsList[0].yearMonth + "-01";
 
-    // All queries in parallel
     const [
       monthlyRows,
       allCatRows,
@@ -27,65 +24,79 @@ export async function GET(request: Request) {
       catByMonthRows,
       dowRows,
       allAccounts,
-      allSnaps,
+      accountTxRows,
+      savingsInflowRows,
     ] = await Promise.all([
-      // Monthly income/expense totals
+      // income + expense + loan_payment count in budget stats (loan_payment mapped to expense)
       db.execute(`
-        select to_char(date::date,'YYYY-MM') as month, type, sum(amount) as total
-        from finance_transactions
-        where date >= '${firstDate}'::date
-        group by 1,2 order by 1
+        SELECT to_char(date::date,'YYYY-MM') as month,
+          CASE WHEN type='loan_payment' THEN 'expense' ELSE type END as type,
+          sum(amount) as total
+        FROM finance_transactions
+        WHERE type IN ('income','expense','loan_payment') AND date >= '${firstDate}'::date
+        GROUP BY 1,2 ORDER BY 1
       `),
-      // All-time expense by category (for donut)
       db.execute(`
-        select fc.id, fc.name, fc.color, fc.icon, sum(ft.amount) as total
-        from finance_transactions ft
-        left join finance_categories fc on ft.category_id = fc.id
-        where ft.type = 'expense'
-        group by fc.id, fc.name, fc.color, fc.icon
-        order by total desc
+        SELECT fc.id, fc.name, fc.color, fc.icon, sum(ft.amount) as total
+        FROM finance_transactions ft
+        LEFT JOIN finance_categories fc ON ft.category_id = fc.id
+        WHERE ft.type IN ('expense','loan_payment')
+        GROUP BY fc.id, fc.name, fc.color, fc.icon
+        ORDER BY total DESC
       `),
-      // Daily income + expense (for heatmap and cumulative balance)
       db.execute(`
-        select
-          date::text as date,
-          coalesce(sum(amount) filter (where type='expense'),0) as expense,
-          coalesce(sum(amount) filter (where type='income'),0) as income
-        from finance_transactions
-        where date >= '${firstDate}'::date
-        group by date
-        order by date
+        SELECT
+          date::text AS date,
+          COALESCE(SUM(amount) FILTER (WHERE type IN ('expense','loan_payment')), 0) AS expense,
+          COALESCE(SUM(amount) FILTER (WHERE type='income'), 0) AS income
+        FROM finance_transactions
+        WHERE type IN ('income','expense','loan_payment') AND date >= '${firstDate}'::date
+        GROUP BY date ORDER BY date
       `),
-      // Expense by category by month (for stacked chart)
       db.execute(`
-        select
+        SELECT
           to_char(ft.date::date,'YYYY-MM') as month,
-          coalesce(fc.id::text,'none') as cat_id,
-          coalesce(fc.name,'Sans catégorie') as cat_name,
-          coalesce(fc.color,'#9ca3af') as cat_color,
-          coalesce(fc.icon,'💰') as cat_icon,
-          sum(ft.amount) as total
-        from finance_transactions ft
-        left join finance_categories fc on ft.category_id = fc.id
-        where ft.type = 'expense' and ft.date >= '${firstDate}'::date
-        group by 1,2,3,4,5
-        order by 1, total desc
+          COALESCE(fc.id::text,'none') as cat_id,
+          COALESCE(fc.name,'Sans catégorie') as cat_name,
+          COALESCE(fc.color,'#9ca3af') as cat_color,
+          COALESCE(fc.icon,'💰') as cat_icon,
+          SUM(ft.amount) as total
+        FROM finance_transactions ft
+        LEFT JOIN finance_categories fc ON ft.category_id = fc.id
+        WHERE ft.type IN ('expense','loan_payment') AND ft.date >= '${firstDate}'::date
+        GROUP BY 1,2,3,4,5 ORDER BY 1, total DESC
       `),
-      // Spending by ISO day of week (1=Mon … 7=Sun)
       db.execute(`
-        select
-          extract(isodow from date::date)::int as dow,
-          sum(amount) as total,
-          count(*) as tx_count
-        from finance_transactions
-        where type='expense' and date >= '${firstDate}'::date
-        group by 1 order by 1
+        SELECT
+          extract(isodow FROM date::date)::int AS dow,
+          SUM(amount) AS total, COUNT(*) AS tx_count
+        FROM finance_transactions
+        WHERE type IN ('expense','loan_payment') AND date >= '${firstDate}'::date
+        GROUP BY 1 ORDER BY 1
       `),
       db.select().from(finance_accounts),
-      db.select().from(finance_account_snapshots).orderBy(finance_account_snapshots.date),
+      // All transactions affecting any account (for balance timelines)
+      db.execute(`
+        SELECT date::text AS date, account_id, to_account_id, type,
+          SUM(amount::numeric) AS total
+        FROM finance_transactions
+        WHERE account_id IS NOT NULL OR to_account_id IS NOT NULL
+        GROUP BY date, account_id, to_account_id, type
+        ORDER BY date
+      `),
+      // Monthly inflows into savings/investment accounts (via transfers)
+      db.execute(`
+        SELECT to_char(ft.date::date,'YYYY-MM') as month, SUM(ft.amount::numeric) as total
+        FROM finance_transactions ft
+        JOIN finance_accounts fa ON ft.to_account_id = fa.id
+        WHERE ft.type = 'transfer'
+          AND fa.type IN ('savings','investment')
+          AND ft.date >= '${firstDate}'::date
+        GROUP BY 1 ORDER BY 1
+      `),
     ]);
 
-    // ── Monthly summary ────────────────────────────────────────────────────────
+    // ── Monthly summary (income/expense only) ─────────────────────────────────
     const monthlyMap: Record<string, { income: number; expense: number }> = {};
     for (const row of monthlyRows.rows as { month: string; type: string; total: string }[]) {
       if (!monthlyMap[row.month]) monthlyMap[row.month] = { income: 0, expense: 0 };
@@ -100,59 +111,82 @@ export async function GET(request: Request) {
 
     // ── All-time category expenses ─────────────────────────────────────────────
     const allCategoryExpenses = (allCatRows.rows as { id: string; name: string; color: string; icon: string; total: string }[]).map((r) => ({
-      id: r.id ?? "uncategorized",
-      name: r.name ?? "Sans catégorie",
-      color: r.color ?? "#888",
-      icon: r.icon ?? "💰",
-      total: parseFloat(r.total),
+      id: r.id ?? "uncategorized", name: r.name ?? "Sans catégorie",
+      color: r.color ?? "#888", icon: r.icon ?? "💰", total: parseFloat(r.total),
     }));
 
     // ── Daily data ────────────────────────────────────────────────────────────
     const dailyData = (dailyRows.rows as { date: string; expense: string; income: string }[]).map((r) => ({
-      date: r.date,
-      expense: parseFloat(r.expense),
-      income: parseFloat(r.income),
+      date: r.date, expense: parseFloat(r.expense), income: parseFloat(r.income),
     }));
 
     // ── Category by month ─────────────────────────────────────────────────────
     const categoryByMonth = (catByMonthRows.rows as { month: string; cat_id: string; cat_name: string; cat_color: string; cat_icon: string; total: string }[]).map((r) => ({
-      month: r.month,
-      cat_id: r.cat_id,
-      cat_name: r.cat_name,
-      cat_color: r.cat_color,
-      cat_icon: r.cat_icon,
-      total: parseFloat(r.total),
+      month: r.month, cat_id: r.cat_id, cat_name: r.cat_name,
+      cat_color: r.cat_color, cat_icon: r.cat_icon, total: parseFloat(r.total),
     }));
 
     // ── Day-of-week spending ───────────────────────────────────────────────────
     const DOW_FR = ["", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
     const byDayOfWeek = (dowRows.rows as { dow: number; total: string; tx_count: string }[]).map((r) => ({
-      day: DOW_FR[r.dow] ?? String(r.dow),
-      total: parseFloat(r.total),
-      count: parseInt(r.tx_count),
+      day: DOW_FR[r.dow] ?? String(r.dow), total: parseFloat(r.total), count: parseInt(r.tx_count),
     }));
 
-    // ── Patrimony ─────────────────────────────────────────────────────────────
-    const snapsByAccount: Record<string, { date: string; balance: number }[]> = {};
-    for (const snap of allSnaps) {
-      if (!snapsByAccount[snap.account_id]) snapsByAccount[snap.account_id] = [];
-      snapsByAccount[snap.account_id].push({ date: snap.date, balance: parseFloat(snap.balance) });
-    }
-    const allDates = [...new Set(allSnaps.map((s) => s.date))].sort();
-    const accountsSummary = allAccounts.map((a) => {
-      const snaps = snapsByAccount[a.id] ?? [];
-      const latest = snaps[snaps.length - 1];
-      return { id: a.id, name: a.name, type: a.type, color: a.color, latest_balance: latest ? latest.balance : 0, snapshots: snaps };
-    });
-    const totalPatrimony = accountsSummary.reduce((s, a) => s + a.latest_balance, 0);
-    const patrimonyTimeline: { date: string; total: number }[] = allDates.map((date) => {
-      let total = 0;
-      for (const account of allAccounts) {
-        const snaps = (snapsByAccount[account.id] ?? []).filter((s) => s.date <= date);
-        if (snaps.length > 0) total += snaps[snaps.length - 1].balance;
+    // ── Account balance timelines ─────────────────────────────────────────────
+    type ATRow = { date: string; account_id: string | null; to_account_id: string | null; type: string; total: string };
+    const allDates = [...new Set((accountTxRows.rows as ATRow[]).map((r) => r.date))].sort();
+
+    const deltas: Record<string, Record<string, number>> = {};
+    for (const row of accountTxRows.rows as ATRow[]) {
+      const amt = parseFloat(row.total);
+      // Impact on source account
+      if (row.account_id) {
+        if (!deltas[row.account_id]) deltas[row.account_id] = {};
+        let delta = 0;
+        if (row.type === "income") delta = amt;
+        else if (row.type === "expense") delta = -amt;
+        else if (row.type === "transfer") delta = -amt;
+        else if (row.type === "loan_payment") delta = -amt;
+        else if (row.type === "adjustment") delta = amt; // signed
+        deltas[row.account_id][row.date] = (deltas[row.account_id][row.date] ?? 0) + delta;
       }
-      return { date, total };
+      // Impact on destination account (transfers + loan_payments)
+      if (row.to_account_id && (row.type === "transfer" || row.type === "loan_payment")) {
+        if (!deltas[row.to_account_id]) deltas[row.to_account_id] = {};
+        deltas[row.to_account_id][row.date] = (deltas[row.to_account_id][row.date] ?? 0) + amt;
+      }
+    }
+
+    const accountsSummary = allAccounts.map((a) => {
+      const initial = parseFloat(String(a.initial_balance ?? "0"));
+      const accountDeltas = deltas[a.id] ?? {};
+      let running = initial;
+      const timeline: { date: string; balance: number }[] = [];
+      for (const date of allDates) {
+        running += accountDeltas[date] ?? 0;
+        timeline.push({ date, balance: Math.round(running * 100) / 100 });
+      }
+      const currentBalance = timeline.length > 0 ? timeline[timeline.length - 1].balance : initial;
+      return { id: a.id, name: a.name, type: a.type, color: a.color, initial_balance: initial, current_balance: currentBalance, timeline };
     });
+
+    const totalPatrimony = accountsSummary.reduce((s, a) => s + a.current_balance, 0);
+    const patrimonyTimeline: { date: string; total: number }[] = allDates.map((date) => {
+      const total = accountsSummary.reduce((s, a) => {
+        const entry = [...a.timeline].reverse().find((e) => e.date <= date);
+        return s + (entry?.balance ?? a.initial_balance);
+      }, 0);
+      return { date, total: Math.round(total * 100) / 100 };
+    });
+
+    // ── Savings inflows per month ─────────────────────────────────────────────
+    const savingsInflowMap: Record<string, number> = {};
+    for (const row of savingsInflowRows.rows as { month: string; total: string }[]) {
+      savingsInflowMap[row.month] = parseFloat(row.total);
+    }
+    const savingsInflows = monthsList.map(({ label, yearMonth }) => ({
+      label, yearMonth, total: savingsInflowMap[yearMonth] ?? 0,
+    }));
 
     // ── Trends ────────────────────────────────────────────────────────────────
     const lastTwo = monthly.slice(-2);
@@ -160,19 +194,13 @@ export async function GET(request: Request) {
       expense_vs_prev: lastTwo.length >= 2 ? lastTwo[1].expense - lastTwo[0].expense : 0,
       income_vs_prev: lastTwo.length >= 2 ? lastTwo[1].income - lastTwo[0].income : 0,
       savings_vs_prev: lastTwo.length >= 2 ? lastTwo[1].balance - lastTwo[0].balance : 0,
-      patrimony_trend: patrimonyTimeline.length >= 2 ? patrimonyTimeline[patrimonyTimeline.length - 1].total - patrimonyTimeline[patrimonyTimeline.length - 2].total : 0,
+      patrimony_trend: patrimonyTimeline.length >= 2
+        ? patrimonyTimeline[patrimonyTimeline.length - 1].total - patrimonyTimeline[patrimonyTimeline.length - 2].total : 0,
     };
 
     return NextResponse.json({
-      monthly,
-      allCategoryExpenses,
-      dailyData,
-      categoryByMonth,
-      byDayOfWeek,
-      accounts: accountsSummary,
-      totalPatrimony,
-      patrimonyTimeline,
-      trends,
+      monthly, allCategoryExpenses, dailyData, categoryByMonth, byDayOfWeek,
+      accounts: accountsSummary, totalPatrimony, patrimonyTimeline, savingsInflows, trends,
     });
   } catch (error) {
     console.error(error);
