@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, tasks, meditations, shopping_items, reminders, books, journal_entries, birthdays, dnd_sessions } from "@/lib/schema";
+import { projects, tasks, meditations, shopping_items, reminders, books, journal_entries, birthdays, dnd_sessions, recipes } from "@/lib/schema";
 import { sql, desc, and, eq, gte } from "drizzle-orm";
 
 export async function GET() {
@@ -14,6 +14,7 @@ export async function GET() {
       libraryStats,
       journalReview,
       allBirthdays,
+      recipeStats,
       nextDndSessionRows,
     ] = await Promise.all([
       db.select({
@@ -52,6 +53,7 @@ export async function GET() {
         .from(journal_entries)
         .where(sql`exists (select 1 from journal_logs jl where jl.entry_id = journal_entries.id and jl.review_date is not null and jl.review_date <= (current_date + interval '7 days')::date)`),
       db.select({ birth_date: birthdays.birth_date }).from(birthdays),
+      db.select({ total: sql<number>`count(*)` }).from(recipes),
       db.select({ id: dnd_sessions.id, title: dnd_sessions.title, session_date: dnd_sessions.session_date, session_time: dnd_sessions.session_time })
         .from(dnd_sessions)
         .where(and(eq(dnd_sessions.status, "Planifiée"), gte(dnd_sessions.session_date, sql`current_date::text`)))
@@ -83,6 +85,7 @@ export async function GET() {
       library: { reading: Number(ls.reading), read: Number(ls.read) },
       journal_review: journalReview.filter((e) => e.review_date !== null),
       birthdays_upcoming: birthdaysUpcoming,
+      cuisine: { total: Number(recipeStats[0]?.total ?? 0) },
       next_dnd_session: nextDndSessionRows[0] ?? null,
     });
   } catch (error) {

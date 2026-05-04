@@ -317,3 +317,35 @@ export const finance_accounts = pgTable("finance_accounts", {
   initial_balance: numeric("initial_balance").notNull().default("0"),
   created_at: timestamp("created_at").defaultNow(),
 });
+
+// ── Cuisine ───────────────────────────────────────────────────────────────────
+
+export const recipe_categories = pgTable("recipe_categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  icon: text("icon"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+export const recipes = pgTable("recipes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  category_id: uuid("category_id").references(() => recipe_categories.id, { onDelete: "set null" }),
+  servings: integer("servings"),
+  prep_time: integer("prep_time"),
+  cook_time: integer("cook_time"),
+  steps: text("steps"),
+  notes: text("notes"),
+  created_at: timestamp("created_at").defaultNow(),
+  updated_at: timestamp("updated_at").defaultNow(),
+});
+
+export const recipe_ingredients = pgTable("recipe_ingredients", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  recipe_id: uuid("recipe_id").references(() => recipes.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  quantity: numeric("quantity"),
+  unit: text("unit"),
+  sort_order: integer("sort_order").default(0),
+  created_at: timestamp("created_at").defaultNow(),
+});

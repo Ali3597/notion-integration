@@ -130,3 +130,40 @@ export type DBHabitLog = {
   note: string | null;
   created_at?: string | null;
 };
+
+// ── Cuisine ───────────────────────────────────────────────────────────────────
+
+export type DBRecipeCategory = {
+  id: string;
+  name: string;
+  icon: string | null;
+  created_at?: string | null;
+};
+
+export type DBRecipeIngredient = {
+  id: string;
+  recipe_id: string;
+  name: string;
+  quantity: string | null;
+  unit: string | null;
+  sort_order: number | null;
+  created_at?: string | null;
+};
+
+export type DBRecipe = {
+  id: string;
+  title: string;
+  category_id: string | null;
+  category_name?: string | null;
+  category_icon?: string | null;
+  servings: number | null;
+  prep_time: number | null;
+  cook_time: number | null;
+  steps: string | null;
+  notes: string | null;
+  ingredient_count?: number;
+  ingredient_names?: string | null;
+  ingredients?: DBRecipeIngredient[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};

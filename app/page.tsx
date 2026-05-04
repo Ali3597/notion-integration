@@ -32,6 +32,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/shopping", icon: "🛒", label: "Shopping" },
       { href: "/birthdays", icon: "🎂", label: "Anniversaires" },
       { href: "/finances", icon: "💶", label: "Finances" },
+      { href: "/cuisine", icon: "🍳", label: "Cuisine" },
     ],
   },
   {
