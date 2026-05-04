@@ -19,6 +19,7 @@ interface Category {
   icon: string;
   type: string;
   budget?: string | null;
+  exclude_from_rate?: boolean;
   transaction_count?: number;
 }
 
@@ -125,6 +126,27 @@ const CAT_TYPE_LABELS: Record<string, string> = {
 const PRESET_COLORS = [
   "#3b7ef8", "#e84f7b", "#16a34a", "#f59e0b", "#8b5cf6",
   "#06b6d4", "#ef4444", "#10b981", "#f97316", "#6366f1",
+];
+
+const EMOJI_SUGGESTIONS = [
+  // Finance
+  "💰","💵","💶","💷","💳","🏦","💹","📈","📉","💸","🪙","🏧",
+  // Revenus / travail
+  "💼","👔","🎁","🏆","📋","✏️","🤝",
+  // Alimentation
+  "🛒","🍔","🍕","🥗","☕","🍷","🍺","🥐","🍣","🥩","🍽️","🧃",
+  // Transport
+  "🚗","🚇","🚌","✈️","⛽","🚕","🚲","🛵","🚢","🚁",
+  // Logement
+  "🏠","🏡","💡","🔧","🛋️","🛁","🪴","🔑","🧹",
+  // Santé
+  "💊","🏥","🦷","👓","💪","🧘","🩺","🏃",
+  // Loisirs
+  "🎬","🎮","📚","🏋️","⚽","🎵","🎭","🎨","🎲","🎯","🧩","🎤",
+  // Shopping / tech
+  "👕","👗","👟","💄","🛍️","📱","💻","⌚","👜","🎒",
+  // Divers
+  "🎓","🌍","🐾","🌿","🎂","🎉","🏖️","✂️",
 ];
 
 const DEFAULT_CATEGORIES: Omit<Category, "id" | "transaction_count">[] = [
@@ -419,6 +441,29 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   );
 }
 
+function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, padding: 8, background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 10, maxHeight: 180, overflowY: "auto" }}>
+      {EMOJI_SUGGESTIONS.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          onClick={() => onChange(emoji)}
+          style={{
+            width: 36, height: 36, fontSize: 20, border: "1.5px solid",
+            borderColor: value === emoji ? "var(--accent)" : "transparent",
+            borderRadius: 8, background: value === emoji ? "rgba(59,126,248,0.1)" : "transparent",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "border-color 0.1s, background 0.1s",
+          }}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Row actions ────────────────────────────────────────────────────────────────
 
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
@@ -430,9 +475,53 @@ function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => 
   );
 }
 
+// ── Inline category creation sub-form ─────────────────────────────────────────
+
+function InlineCatForm({
+  name, setName, color, setColor, icon, setIcon, type, setType, onSave, onCancel,
+}: {
+  name: string; setName: (v: string) => void;
+  color: string; setColor: (v: string) => void;
+  icon: string; setIcon: (v: string) => void;
+  type: string; setType: (v: string) => void;
+  onSave: () => void; onCancel: () => void;
+}) {
+  return (
+    <div style={{ border: "1.5px solid var(--accent)", borderRadius: 10, padding: 14, marginTop: 8, background: "rgba(59,126,248,0.03)" }}>
+      <div style={{ fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--accent)", marginBottom: 12 }}>
+        Nouvelle catégorie
+      </div>
+      <Field label="Nom">
+        <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Loyer, Salaire…" autoFocus />
+      </Field>
+      <Field label="Icône">
+        <EmojiPicker value={icon} onChange={setIcon} />
+      </Field>
+      <Field label="Couleur">
+        <ColorPicker value={color} onChange={setColor} />
+      </Field>
+      <Field label="Type">
+        <select style={selectStyle} value={type} onChange={(e) => setType(e.target.value)}>
+          <option value="both">Revenus et dépenses</option>
+          <option value="income">Revenus uniquement</option>
+          <option value="expense">Dépenses uniquement</option>
+        </select>
+      </Field>
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <button type="button" onClick={onSave} style={{ ...btnPrimary, fontSize: 13, padding: "7px 14px" }}>Créer</button>
+        <button type="button" onClick={onCancel} style={{ ...btnGhost, fontSize: 13, padding: "7px 14px" }}>Annuler</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Mois ──────────────────────────────────────────────────────────────────
 
-function MonthTab({ categories, accounts }: { categories: Category[]; accounts: Account[] }) {
+function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: {
+  categories: Category[];
+  accounts: Account[];
+  onCategoryAdded?: (cat: Category) => void;
+}) {
   const [month, setMonth] = useState(currentMonth());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<MonthStats | null>(null);
@@ -440,6 +529,14 @@ function MonthTab({ categories, accounts }: { categories: Category[]; accounts: 
   const [showAdd, setShowAdd] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [typeFilter, setTypeFilter] = useState<"" | "income" | "expense" | "transfer" | "adjustment" | "loan_payment">("");
+  const [localCategories, setLocalCategories] = useState<Category[]>(initialCategories);
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatColor, setNewCatColor] = useState("#3b7ef8");
+  const [newCatIcon, setNewCatIcon] = useState("💰");
+  const [newCatType, setNewCatType] = useState("both");
+
+  useEffect(() => { setLocalCategories(initialCategories); }, [initialCategories]);
 
   const form = {
     amount: useState(""),
@@ -450,7 +547,7 @@ function MonthTab({ categories, accounts }: { categories: Category[]; accounts: 
     notes: useState(""),
     account_id: useState(""),
     to_account_id: useState(""),
-    new_balance: useState(""), // for adjustment: user enters target balance
+    new_balance: useState(""),
   };
 
   const load = useCallback(async () => {
@@ -542,13 +639,29 @@ function MonthTab({ categories, accounts }: { categories: Category[]; accounts: 
     load();
   }
 
+  async function saveNewCat() {
+    if (!newCatName.trim()) return;
+    const res = await fetch("/api/finances/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newCatName.trim(), color: newCatColor, icon: newCatIcon, type: newCatType }),
+    });
+    if (!res.ok) return;
+    const newCat: Category = await res.json();
+    setLocalCategories((prev) => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
+    form.category_id[1](newCat.id);
+    setShowNewCat(false);
+    setNewCatName(""); setNewCatColor("#3b7ef8"); setNewCatIcon("💰"); setNewCatType("both");
+    onCategoryAdded?.(newCat);
+  }
+
   const filtered = useMemo(() => {
     if (!typeFilter) return transactions;
     return transactions.filter((t) => t.type === typeFilter);
   }, [transactions, typeFilter]);
 
   const txType = form.type[0];
-  const catOptions = categories.filter((c) => !txType || c.type === txType || c.type === "both");
+  const catOptions = localCategories.filter((c) => !txType || c.type === txType || c.type === "both");
   const selectedAcct = accounts.find((a) => a.id === form.account_id[0]);
 
   const txFormJSX = (onClose: () => void) => (
@@ -588,12 +701,16 @@ function MonthTab({ categories, accounts }: { categories: Category[]; accounts: 
               onChange={(e) => form.description[1](e.target.value)} placeholder="ex. Mensualité crédit immobilier" />
           </Field>
           <Field label="Catégorie">
-            <select style={selectStyle} value={form.category_id[0]} onChange={(e) => form.category_id[1](e.target.value)}>
-              <option value="">Sans catégorie</option>
-              {categories.filter((c) => c.type === "expense" || c.type === "both").map((c) => (
-                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-              ))}
-            </select>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select style={{ ...selectStyle, flex: 1 }} value={form.category_id[0]} onChange={(e) => form.category_id[1](e.target.value)}>
+                <option value="">Sans catégorie</option>
+                {localCategories.filter((c) => c.type === "expense" || c.type === "both").map((c) => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setShowNewCat((v) => !v)} style={btnIcon} title="Créer une catégorie"><IconPlus /></button>
+            </div>
+            {showNewCat && <InlineCatForm name={newCatName} setName={setNewCatName} color={newCatColor} setColor={setNewCatColor} icon={newCatIcon} setIcon={setNewCatIcon} type={newCatType} setType={setNewCatType} onSave={saveNewCat} onCancel={() => setShowNewCat(false)} />}
           </Field>
         </>
       )}
@@ -670,12 +787,16 @@ function MonthTab({ categories, accounts }: { categories: Category[]; accounts: 
               onChange={(e) => form.description[1](e.target.value)} placeholder="Libellé de la transaction" />
           </Field>
           <Field label="Catégorie">
-            <select style={selectStyle} value={form.category_id[0]} onChange={(e) => form.category_id[1](e.target.value)}>
-              <option value="">Sans catégorie</option>
-              {catOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-              ))}
-            </select>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select style={{ ...selectStyle, flex: 1 }} value={form.category_id[0]} onChange={(e) => form.category_id[1](e.target.value)}>
+                <option value="">Sans catégorie</option>
+                {catOptions.map((c) => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setShowNewCat((v) => !v)} style={btnIcon} title="Créer une catégorie"><IconPlus /></button>
+            </div>
+            {showNewCat && <InlineCatForm name={newCatName} setName={setNewCatName} color={newCatColor} setColor={setNewCatColor} icon={newCatIcon} setIcon={setNewCatIcon} type={newCatType} setType={setNewCatType} onSave={saveNewCat} onCancel={() => setShowNewCat(false)} />}
           </Field>
           <Field label="Compte">
             <select style={selectStyle} value={form.account_id[0]} onChange={(e) => form.account_id[1](e.target.value)}>
@@ -1039,7 +1160,7 @@ function AccountsTab() {
 
 // ── Tab: Catégories ────────────────────────────────────────────────────────────
 
-function CategoriesTab() {
+function CategoriesTab({ onCategoryChange }: { onCategoryChange?: () => void }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editCat, setEditCat] = useState<Category | null>(null);
@@ -1051,6 +1172,7 @@ function CategoriesTab() {
     icon: useState("💰"),
     type: useState("both"),
     budget: useState(""),
+    exclude_from_rate: useState(false),
   };
 
   const load = useCallback(async () => {
@@ -1069,21 +1191,22 @@ function CategoriesTab() {
     }
     setSeeding(false);
     load();
+    onCategoryChange?.();
   }
 
   function openAdd() {
-    form.name[1](""); form.color[1]("#3b7ef8"); form.icon[1]("💰"); form.type[1]("both"); form.budget[1]("");
+    form.name[1](""); form.color[1]("#3b7ef8"); form.icon[1]("💰"); form.type[1]("both"); form.budget[1](""); form.exclude_from_rate[1](false);
     setShowAdd(true);
   }
 
   function openEdit(cat: Category) {
     setEditCat(cat);
     form.name[1](cat.name); form.color[1](cat.color); form.icon[1](cat.icon); form.type[1](cat.type);
-    form.budget[1](cat.budget ? String(cat.budget) : "");
+    form.budget[1](cat.budget ? String(cat.budget) : ""); form.exclude_from_rate[1](cat.exclude_from_rate ?? false);
   }
 
   async function save() {
-    const body = { name: form.name[0], color: form.color[0], icon: form.icon[0], type: form.type[0], budget: form.budget[0] || null };
+    const body = { name: form.name[0], color: form.color[0], icon: form.icon[0], type: form.type[0], budget: form.budget[0] || null, exclude_from_rate: form.exclude_from_rate[0] };
     if (editCat) {
       await fetch(`/api/finances/categories?id=${editCat.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -1096,12 +1219,14 @@ function CategoriesTab() {
       setShowAdd(false);
     }
     load();
+    onCategoryChange?.();
   }
 
   async function remove(id: string) {
     if (!confirm("Supprimer cette catégorie ?")) return;
     await fetch(`/api/finances/categories?id=${id}`, { method: "DELETE" });
     load();
+    onCategoryChange?.();
   }
 
   const catFormJSX = (onClose: () => void) => (
@@ -1109,8 +1234,8 @@ function CategoriesTab() {
       <Field label="Nom">
         <input style={inputStyle} value={form.name[0]} onChange={(e) => form.name[1](e.target.value)} placeholder="ex. Loyer, Salaire…" />
       </Field>
-      <Field label="Icône (emoji)">
-        <input style={inputStyle} value={form.icon[0]} onChange={(e) => form.icon[1](e.target.value)} placeholder="💰" />
+      <Field label="Icône">
+        <EmojiPicker value={form.icon[0]} onChange={form.icon[1]} />
       </Field>
       <Field label="Couleur">
         <ColorPicker value={form.color[0]} onChange={form.color[1]} />
@@ -1126,6 +1251,16 @@ function CategoriesTab() {
         <input style={inputStyle} type="number" min="0" step="0.01" value={form.budget[0]}
           onChange={(e) => form.budget[1](e.target.value)} placeholder="ex. 300 €" />
       </Field>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none", marginBottom: 16 }}>
+        <input type="checkbox" checked={form.exclude_from_rate[0]} onChange={(e) => form.exclude_from_rate[1](e.target.checked)}
+          style={{ width: 16, height: 16, cursor: "pointer", accentColor: "var(--accent)" }} />
+        <span style={{ fontSize: 14 }}>
+          Exclure du taux d'épargne
+          <span style={{ display: "block", fontSize: 12, color: "var(--text-muted)", fontWeight: 400 }}>
+            Revenus exceptionnels (intéressement, cadeaux…) non pris en compte dans le calcul
+          </span>
+        </span>
+      </label>
       <FormFooter onCancel={onClose} onSave={save} />
     </>
   );
@@ -1157,6 +1292,11 @@ function CategoriesTab() {
                 {CAT_TYPE_LABELS[cat.type] ?? cat.type}
                 {cat.transaction_count ? ` · ${cat.transaction_count} opér.` : ""}
                 {cat.budget ? ` · ${formatEur(cat.budget)}/mois` : ""}
+                {cat.exclude_from_rate && (
+                  <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 10, background: "rgba(139,92,246,0.12)", color: "#8b5cf6", fontWeight: 600 }}>
+                    hors taux
+                  </span>
+                )}
               </div>
             </div>
             <RowActions onEdit={() => openEdit(cat)} onDelete={() => remove(cat.id)} />
@@ -2090,10 +2230,14 @@ export default function FinancesPage() {
     window.history.replaceState(null, "", `?tab=${tab}`);
   }, [tab]);
 
-  useEffect(() => {
+  const refreshCategories = useCallback(() => {
     fetch("/api/finances/categories").then((r) => r.json()).then(setCategories);
-    fetch("/api/finances/accounts").then((r) => r.json()).then((d) => setAccounts(Array.isArray(d) ? d : []));
   }, []);
+
+  useEffect(() => {
+    refreshCategories();
+    fetch("/api/finances/accounts").then((r) => r.json()).then((d) => setAccounts(Array.isArray(d) ? d : []));
+  }, [refreshCategories]);
 
   return (
     <main style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
@@ -2122,9 +2266,9 @@ export default function FinancesPage() {
         ))}
       </div>
 
-      {tab === "month" && <MonthTab categories={categories} accounts={accounts} />}
+      {tab === "month" && <MonthTab categories={categories} accounts={accounts} onCategoryAdded={(cat) => setCategories((prev) => [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)))} />}
       {tab === "accounts" && <AccountsTab />}
-      {tab === "categories" && <CategoriesTab />}
+      {tab === "categories" && <CategoriesTab onCategoryChange={refreshCategories} />}
       {tab === "stats" && <StatsTab categories={categories} accounts={accounts} />}
     </main>
   );

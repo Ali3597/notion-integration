@@ -37,6 +37,7 @@ export async function GET(request: Request) {
         category_name: finance_categories.name,
         category_color: finance_categories.color,
         category_icon: finance_categories.icon,
+        category_exclude_from_rate: finance_categories.exclude_from_rate,
         account_name: finance_accounts.name,
         account_color: finance_accounts.color,
         to_account_name: toAccount.name,
@@ -49,10 +50,15 @@ export async function GET(request: Request) {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(finance_transactions.date), desc(finance_transactions.created_at));
 
-    // income + expense + loan_payment count toward monthly budget stats
     const income = rows.filter((r) => r.type === "income").reduce((s, r) => s + parseFloat(r.amount ?? "0"), 0);
     const expense = rows.filter((r) => r.type === "expense" || r.type === "loan_payment").reduce((s, r) => s + parseFloat(r.amount ?? "0"), 0);
     const balance = income - expense;
+
+    // Taux d'épargne : exclut les revenus des catégories marquées "hors taux"
+    const rateIncome = rows
+      .filter((r) => r.type === "income" && !r.category_exclude_from_rate)
+      .reduce((s, r) => s + parseFloat(r.amount ?? "0"), 0);
+    const rateBalance = rateIncome - expense;
 
     return NextResponse.json({
       transactions: rows,
@@ -60,7 +66,7 @@ export async function GET(request: Request) {
         income: income.toFixed(2),
         expense: expense.toFixed(2),
         balance: balance.toFixed(2),
-        savings_rate: income > 0 ? ((balance / income) * 100).toFixed(1) : "0.0",
+        savings_rate: rateIncome > 0 ? ((rateBalance / rateIncome) * 100).toFixed(1) : "0.0",
       },
     });
   } catch (error) {

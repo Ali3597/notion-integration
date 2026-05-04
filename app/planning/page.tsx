@@ -27,10 +27,18 @@ interface PlanningBlock {
 }
 
 interface LinkedProject { id: string; name: string; status: string | null; }
-interface LinkedReminder { id: string; name: string; done: boolean; }
+interface LinkedReminder { id: string; name: string; done: boolean; due_date: string | null; }
 interface LinkedHabit { id: string; name: string; icon: string | null; color: string | null; active: boolean; }
 
 type LinkType = "" | "project" | "reminder" | "habit";
+
+function blockTitle(block: PlanningBlock): string {
+  if (block.title) return block.title;
+  if (block.reminder_name) return block.reminder_name;
+  if (block.project_name) return block.project_name;
+  if (block.habit_name) return (block.habit_icon ? block.habit_icon + " " : "") + block.habit_name;
+  return "Sans titre";
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -121,7 +129,15 @@ export default function PlanningPage() {
         fetch("/api/habits").then((x) => x.json()),
       ]);
       if (Array.isArray(p)) setLinkedProjects(p);
-      if (Array.isArray(r)) setLinkedReminders(r.filter((x: LinkedReminder) => !x.done));
+      if (Array.isArray(r)) setLinkedReminders(
+        r.filter((x: LinkedReminder) => !x.done)
+         .sort((a: LinkedReminder, b: LinkedReminder) => {
+           if (!a.due_date && !b.due_date) return 0;
+           if (!a.due_date) return 1;
+           if (!b.due_date) return -1;
+           return a.due_date.localeCompare(b.due_date);
+         })
+      );
       if (Array.isArray(h)) setLinkedHabits(h.filter((x: LinkedHabit) => x.active));
     } catch { /* ignore */ }
   }, []);
@@ -185,7 +201,7 @@ export default function PlanningPage() {
   // ── CRUD handlers ───────────────────────────────────────────────────────────
 
   async function handleSave() {
-    if (!formTitle.trim() || !formStart || !formEnd || !formDay) return;
+    if (!formStart || !formEnd || !formDay) return;
     setSaving(true);
 
     const payload = {
@@ -237,7 +253,7 @@ export default function PlanningPage() {
   }
 
   async function handleDelete(id: string, title: string) {
-    if (!confirm(`Supprimer "${title}" ?`)) return;
+    if (!confirm(`Supprimer "${title || "ce bloc"}" ?`)) return;
     setBlocks((prev) => prev.filter((b) => b.id !== id));
     await fetch(`/api/planning?id=${id}`, { method: "DELETE" });
   }
@@ -360,7 +376,7 @@ export default function PlanningPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                         <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>
-                          {block.title}
+                          {blockTitle(block)}
                         </span>
                         {statusCfg && (
                           <span style={{
@@ -555,13 +571,13 @@ export default function PlanningPage() {
 
             {/* Title */}
             <div style={s.field}>
-              <label style={s.label}>Intitulé</label>
+              <label style={s.label}>Intitulé <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>(optionnel)</span></label>
               <input
                 ref={titleInputRef}
                 type="text"
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="Ex : Boulot, Sport, Lecture…"
+                placeholder="Laisse vide pour utiliser le nom du lien…"
                 style={s.input}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSave(); }}
               />
@@ -617,9 +633,12 @@ export default function PlanningPage() {
                 <label style={s.label}>Rappel</label>
                 <select value={formReminderId} onChange={(e) => setFormReminderId(e.target.value)} style={s.input}>
                   <option value="">— Choisir un rappel</option>
-                  {linkedReminders.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
+                  {linkedReminders.map((r) => {
+                    const dateLabel = r.due_date
+                      ? (() => { const [y, m, d] = r.due_date.split("-"); return `${d}/${m}/${y}`; })()
+                      : "Sans date";
+                    return <option key={r.id} value={r.id}>{dateLabel} — {r.name}</option>;
+                  })}
                 </select>
               </div>
             )}
@@ -648,7 +667,7 @@ export default function PlanningPage() {
               <button
                 className="btn-primary"
                 onClick={handleSave}
-                disabled={saving || !formTitle.trim() || !formStart || !formEnd || !formDay}
+                disabled={saving || !formStart || !formEnd || !formDay}
               >
                 {saving ? "…" : editingId ? "Enregistrer" : "Créer"}
               </button>

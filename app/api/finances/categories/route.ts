@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { finance_categories, finance_transactions, finance_recurring } from "@/lib/schema";
+import { finance_categories, finance_transactions } from "@/lib/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
@@ -13,6 +13,7 @@ export async function GET() {
         icon: finance_categories.icon,
         type: finance_categories.type,
         budget: finance_categories.budget,
+        exclude_from_rate: finance_categories.exclude_from_rate,
         created_at: finance_categories.created_at,
         transaction_count: sql<number>`(select count(*) from finance_transactions ft where ft.category_id = finance_categories.id)`,
       })
@@ -28,7 +29,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, color, icon, type, budget } = body;
+    const { name, color, icon, type, budget, exclude_from_rate } = body;
     if (!name?.trim()) return NextResponse.json({ error: "Le nom est requis" }, { status: 400 });
 
     const [cat] = await db.insert(finance_categories).values({
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
       icon: icon ?? "💰",
       type: type ?? "both",
       budget: budget !== undefined && budget !== "" ? String(parseFloat(budget).toFixed(2)) : null,
+      exclude_from_rate: exclude_from_rate ?? false,
     }).returning();
     return NextResponse.json(cat, { status: 201 });
   } catch (error) {
@@ -58,6 +60,7 @@ export async function PATCH(request: Request) {
     if (body.icon !== undefined) updates.icon = body.icon;
     if (body.type !== undefined) updates.type = body.type;
     if (body.budget !== undefined) updates.budget = body.budget !== "" && body.budget !== null ? String(parseFloat(body.budget).toFixed(2)) : null;
+    if (body.exclude_from_rate !== undefined) updates.exclude_from_rate = body.exclude_from_rate;
 
     const [updated] = await db.update(finance_categories).set(updates).where(eq(finance_categories.id, id)).returning();
     if (!updated) return NextResponse.json({ error: "Catégorie non trouvée" }, { status: 404 });

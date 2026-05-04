@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { day, start_time, end_time, title, notes, project_id, reminder_id, habit_id } = body;
 
-    if (!day || !start_time || !end_time || !title?.trim()) {
+    if (!day || !start_time || !end_time) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         day,
         start_time,
         end_time,
-        title: title.trim(),
+        title: (title ?? "").trim(),
         notes: notes || null,
         project_id: project_id || null,
         reminder_id: reminder_id || null,

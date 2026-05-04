@@ -277,7 +277,8 @@ export const finance_categories = pgTable("finance_categories", {
   color: text("color").notNull().default("#3b7ef8"),
   icon: text("icon").notNull().default("💰"),
   type: text("type").notNull().default("both"), // "income" | "expense" | "both"
-  budget: numeric("budget"), // enveloppe budgétaire mensuelle optionnelle
+  budget: numeric("budget"),
+  exclude_from_rate: boolean("exclude_from_rate").notNull().default(false),
   created_at: timestamp("created_at").defaultNow(),
 });
 
