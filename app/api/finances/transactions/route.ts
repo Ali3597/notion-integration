@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { finance_transactions, finance_categories, finance_accounts } from "@/lib/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, or, gte, lte, desc, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 const toAccount = alias(finance_accounts, "to_acc");
@@ -12,13 +12,19 @@ export async function GET(request: Request) {
     const month = searchParams.get("month");
 
     const conditions = [];
+    let viewedMonth = "";
     if (month) {
       const [year, m] = month.split("-");
+      viewedMonth = month;
       const first = `${year}-${m}-01`;
       const nextMonth = new Date(parseInt(year), parseInt(m), 0);
       const last = `${year}-${m}-${String(nextMonth.getDate()).padStart(2, "0")}`;
-      conditions.push(gte(finance_transactions.date, first));
+      // Include transactions in this month + spread transactions from earlier months covering this month
       conditions.push(lte(finance_transactions.date, last));
+      conditions.push(or(
+        gte(finance_transactions.date, first),
+        sql`(COALESCE(${finance_transactions.spread_months}, 1) > 1 AND (${finance_transactions.date}::date + ((COALESCE(${finance_transactions.spread_months}, 1) - 1) || ' months')::interval)::date >= ${first}::date)`
+      )!);
     }
 
     const rows = await db
@@ -32,6 +38,7 @@ export async function GET(request: Request) {
         recurring_id: finance_transactions.recurring_id,
         account_id: finance_transactions.account_id,
         to_account_id: finance_transactions.to_account_id,
+        spread_months: finance_transactions.spread_months,
         created_at: finance_transactions.created_at,
         category_id: finance_categories.id,
         category_name: finance_categories.name,
@@ -50,14 +57,17 @@ export async function GET(request: Request) {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(finance_transactions.date), desc(finance_transactions.created_at));
 
-    const income = rows.filter((r) => r.type === "income").reduce((s, r) => s + parseFloat(r.amount ?? "0"), 0);
-    const expense = rows.filter((r) => r.type === "expense" || r.type === "loan_payment").reduce((s, r) => s + parseFloat(r.amount ?? "0"), 0);
+    // Pour les transactions étalées, le budget mensuel = amount / spread_months
+    const budgetAmt = (r: typeof rows[number]) => parseFloat(r.amount ?? "0") / Math.max(r.spread_months ?? 1, 1);
+
+    const income = rows.filter((r) => r.type === "income").reduce((s, r) => s + budgetAmt(r), 0);
+    const expense = rows.filter((r) => r.type === "expense" || r.type === "loan_payment").reduce((s, r) => s + budgetAmt(r), 0);
     const balance = income - expense;
 
     // Taux d'épargne : exclut les revenus des catégories marquées "hors taux"
     const rateIncome = rows
       .filter((r) => r.type === "income" && !r.category_exclude_from_rate)
-      .reduce((s, r) => s + parseFloat(r.amount ?? "0"), 0);
+      .reduce((s, r) => s + budgetAmt(r), 0);
     const rateBalance = rateIncome - expense;
 
     return NextResponse.json({
@@ -78,7 +88,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { amount, description, category_id, type, date, notes, account_id, to_account_id, recurring_id } = body;
+    const { amount, description, category_id, type, date, notes, account_id, to_account_id, recurring_id, spread_months } = body;
 
     if (!type || !["income", "expense", "transfer", "adjustment", "loan_payment"].includes(type))
       return NextResponse.json({ error: "Le type est requis" }, { status: 400 });
@@ -99,6 +109,9 @@ export async function POST(request: Request) {
 
     const parsedAmount = parseFloat(amount);
 
+    const parsedSpread = (type === "expense" || type === "income") && spread_months && parseInt(spread_months) > 1
+      ? parseInt(spread_months) : 1;
+
     const [tx] = await db.insert(finance_transactions).values({
       amount: String(parsedAmount.toFixed(2)), // can be negative for adjustments
       description: description?.trim() || (type === "transfer" ? "Virement" : "Ajustement de solde"),
@@ -109,6 +122,7 @@ export async function POST(request: Request) {
       account_id: account_id ?? null,
       to_account_id: to_account_id ?? null,
       recurring_id: recurring_id ?? null,
+      spread_months: parsedSpread,
     }).returning();
     return NextResponse.json(tx, { status: 201 });
   } catch (error) {
@@ -133,6 +147,7 @@ export async function PATCH(request: Request) {
     if (body.notes !== undefined) updates.notes = body.notes;
     if (body.account_id !== undefined) updates.account_id = body.account_id || null;
     if (body.to_account_id !== undefined) updates.to_account_id = body.to_account_id || null;
+    if (body.spread_months !== undefined) updates.spread_months = Math.max(1, parseInt(body.spread_months) || 1);
 
     const [updated] = await db.update(finance_transactions).set(updates).where(eq(finance_transactions.id, id)).returning();
     if (!updated) return NextResponse.json({ error: "Transaction non trouvée" }, { status: 404 });

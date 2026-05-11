@@ -41,6 +41,7 @@ interface Transaction {
   category_name: string | null;
   category_color: string | null;
   category_icon: string | null;
+  spread_months: number | null;
 }
 
 interface MonthStats {
@@ -548,6 +549,7 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
     account_id: useState(""),
     to_account_id: useState(""),
     new_balance: useState(""),
+    spread_months: useState(1),
   };
 
   const load = useCallback(async () => {
@@ -565,6 +567,7 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
     form.amount[1](""); form.description[1](""); form.category_id[1]("");
     form.type[1]("expense"); form.date[1](todayISO()); form.notes[1]("");
     form.account_id[1](""); form.to_account_id[1](""); form.new_balance[1]("");
+    form.spread_months[1](1);
     setShowAdd(true);
   }
 
@@ -579,6 +582,7 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
     form.account_id[1](tx.account_id ?? "");
     form.to_account_id[1](tx.to_account_id ?? "");
     form.new_balance[1]("");
+    form.spread_months[1](tx.spread_months && tx.spread_months > 1 ? tx.spread_months : 1);
   }
 
   async function save() {
@@ -616,6 +620,7 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
         category_id: form.category_id[0] || null, type: txType,
         date: form.date[0], notes: form.notes[0] || null,
         account_id: form.account_id[0] || null,
+        spread_months: form.spread_months[0] > 1 ? form.spread_months[0] : 1,
       };
     }
 
@@ -816,6 +821,32 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
       <Field label="Notes">
         <input style={inputStyle} value={form.notes[0]} onChange={(e) => form.notes[1](e.target.value)} placeholder="Optionnel" />
       </Field>
+
+      {/* ── Étalement budgétaire (expense / income uniquement) ── */}
+      {(txType === "expense" || txType === "income") && (
+        <Field label="Étalement budgétaire">
+          <select style={selectStyle} value={form.spread_months[0]}
+            onChange={(e) => form.spread_months[1](parseInt(e.target.value))}>
+            <option value={1}>Aucun — paiement comptant</option>
+            <option value={2}>2 mois</option>
+            <option value={3}>3 mois (trimestre)</option>
+            <option value={6}>6 mois (semestre)</option>
+            <option value={12}>12 mois (annuel)</option>
+            <option value={24}>24 mois (2 ans)</option>
+          </select>
+          {form.spread_months[0] > 1 && (
+            <div style={{
+              fontSize: 12, color: "var(--accent)", marginTop: 7,
+              padding: "7px 11px", background: "rgba(59,126,248,0.06)",
+              border: "1px solid rgba(59,126,248,0.2)", borderRadius: 8, lineHeight: 1.5,
+            }}>
+              <strong>{formatEur(parseFloat(form.amount[0]) || 0)}</strong> débités immédiatement du compte
+              {" · "}budget <strong>{formatEur((parseFloat(form.amount[0]) || 0) / form.spread_months[0])}/mois</strong> sur {form.spread_months[0]} mois
+            </div>
+          )}
+        </Field>
+      )}
+
       <FormFooter onCancel={onClose} onSave={save} />
     </>
   );
@@ -868,6 +899,19 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
             const isAdjust = tx.type === "adjustment";
             const isLoanPayment = tx.type === "loan_payment";
             const amt = parseFloat(tx.amount);
+            const spreadN = tx.spread_months && tx.spread_months > 1 ? tx.spread_months : 1;
+            const isSpread = spreadN > 1;
+            // Numéro de tranche : mois entre la date de la transaction et le mois affiché
+            const txYM = tx.date.substring(0, 7);
+            const sliceIndex = (() => {
+              if (txYM === month) return 1;
+              const [ty, tm] = txYM.split("-").map(Number);
+              const [vy, vm] = month.split("-").map(Number);
+              return (vy - ty) * 12 + (vm - tm) + 1;
+            })();
+            const isSliceFromPast = isSpread && sliceIndex > 1;
+            const monthlyAmt = isSpread ? amt / spreadN : amt;
+
             const borderColor = isTransfer ? "#6366f1" : isAdjust ? "#f59e0b" : isLoanPayment ? "#ef4444"
               : tx.category_color ?? (tx.type === "income" ? "var(--green)" : "var(--red)");
             const amtColor = isTransfer ? "#6366f1" : isAdjust
@@ -875,19 +919,29 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
               : tx.type === "income" ? "var(--green)" : "var(--red)";
             const amtPrefix = isTransfer ? "" : isAdjust ? (amt >= 0 ? "+" : "") : tx.type === "income" ? "+" : "−";
             return (
-              <div key={tx.id} style={{
+              <div key={`${tx.id}-${sliceIndex}`} style={{
                 display: "flex", alignItems: "center", gap: 12,
-                background: "var(--surface)", border: "1.5px solid var(--border)",
+                background: isSliceFromPast ? "rgba(59,126,248,0.02)" : "var(--surface)",
+                border: `1.5px solid ${isSliceFromPast ? "rgba(59,126,248,0.2)" : "var(--border)"}`,
                 borderRadius: 11, padding: "10px 14px",
-                borderLeft: `3px solid ${borderColor}`,
+                borderLeft: `3px solid ${isSpread ? "var(--accent)" : borderColor}`,
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     {isTransfer ? <span style={{ fontSize: 15 }}>🔄</span>
                       : isLoanPayment ? <span style={{ fontSize: 15 }}>🏦</span>
                       : isAdjust ? <span style={{ fontSize: 15 }}>⚙️</span>
                       : tx.category_icon ? <span style={{ fontSize: 16 }}>{tx.category_icon}</span> : null}
                     <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.description}</span>
+                    {isSpread && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 600, color: "var(--accent)",
+                        background: "rgba(59,126,248,0.12)", borderRadius: 4,
+                        padding: "1px 6px", flexShrink: 0,
+                      }}>
+                        📅 {isSliceFromPast ? `${sliceIndex}/${spreadN}` : `${spreadN} mois`}
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
                     {isTransfer ? (
@@ -914,13 +968,23 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
                       <>
                         {tx.category_name ?? "Sans catégorie"} · {formatDate(tx.date)}
                         {tx.account_name && <span style={{ marginLeft: 6, color: tx.account_color ?? "var(--accent)" }}>· {tx.account_name}</span>}
+                        {isSpread && <span style={{ marginLeft: 6, color: "var(--text-muted)" }}>· total {amtPrefix}{formatEur(tx.amount)}</span>}
                       </>
                     )}
                   </div>
                 </div>
-                <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, flexShrink: 0, color: amtColor }}>
-                  {isTransfer ? "→ " : ""}{amtPrefix}{formatEur(isAdjust ? amt : tx.amount)}
-                </div>
+                {isSpread && !isTransfer && !isAdjust ? (
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, color: amtColor }}>
+                      {amtPrefix}{formatEur(monthlyAmt)}
+                      <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400, marginLeft: 3 }}>/mois</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, flexShrink: 0, color: amtColor }}>
+                    {isTransfer ? "→ " : ""}{amtPrefix}{formatEur(isAdjust ? amt : tx.amount)}
+                  </div>
+                )}
                 <RowActions onEdit={() => openEdit(tx)} onDelete={() => remove(tx.id)} />
               </div>
             );

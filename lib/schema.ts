@@ -305,6 +305,9 @@ export const finance_transactions = pgTable("finance_transactions", {
   account_id: uuid("account_id").references(() => finance_accounts.id, { onDelete: "set null" }),
   to_account_id: uuid("to_account_id").references(() => finance_accounts.id, { onDelete: "set null" }),
   recurring_id: uuid("recurring_id").references(() => finance_recurring.id, { onDelete: "set null" }),
+  // Étalement budgétaire : le compte est débité du montant total immédiatement,
+  // mais la dépense est répartie sur spread_months mois pour le suivi budgétaire.
+  spread_months: integer("spread_months").default(1),
   created_at: timestamp("created_at").defaultNow(),
 });
 

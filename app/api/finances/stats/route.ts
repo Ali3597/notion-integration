@@ -16,6 +16,8 @@ export async function GET(request: Request) {
       monthsList.push({ label, yearMonth: ym });
     }
     const firstDate = monthsList[0].yearMonth + "-01";
+    const firstYM = monthsList[0].yearMonth;
+    const lastYM = monthsList[monthsList.length - 1].yearMonth;
 
     const [
       monthlyRows,
@@ -27,14 +29,19 @@ export async function GET(request: Request) {
       accountTxRows,
       savingsInflowRows,
     ] = await Promise.all([
-      // income + expense + loan_payment count in budget stats (loan_payment mapped to expense)
+      // income + expense + loan_payment avec étalement budgétaire via generate_series
       db.execute(`
-        SELECT to_char(date::date,'YYYY-MM') as month,
-          CASE WHEN type='loan_payment' THEN 'expense' ELSE type END as type,
-          sum(amount) as total
-        FROM finance_transactions
-        WHERE type IN ('income','expense','loan_payment') AND date >= '${firstDate}'::date
-        GROUP BY 1,2 ORDER BY 1
+        SELECT
+          to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') AS month,
+          CASE WHEN ft.type='loan_payment' THEN 'expense' ELSE ft.type END AS type,
+          SUM(ft.amount::numeric / GREATEST(COALESCE(ft.spread_months, 1), 1)) AS total
+        FROM finance_transactions ft,
+          generate_series(0, GREATEST(COALESCE(ft.spread_months, 1), 1) - 1) AS gs(mo)
+        WHERE ft.type IN ('income','expense','loan_payment')
+          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') >= '${firstYM}'
+          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') <= '${lastYM}'
+        GROUP BY 1, 2
+        ORDER BY 1
       `),
       db.execute(`
         SELECT fc.id, fc.name, fc.color, fc.icon, sum(ft.amount) as total
@@ -55,15 +62,18 @@ export async function GET(request: Request) {
       `),
       db.execute(`
         SELECT
-          to_char(ft.date::date,'YYYY-MM') as month,
-          COALESCE(fc.id::text,'none') as cat_id,
-          COALESCE(fc.name,'Sans catégorie') as cat_name,
-          COALESCE(fc.color,'#9ca3af') as cat_color,
-          COALESCE(fc.icon,'💰') as cat_icon,
-          SUM(ft.amount) as total
-        FROM finance_transactions ft
+          to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') AS month,
+          COALESCE(fc.id::text,'none') AS cat_id,
+          COALESCE(fc.name,'Sans catégorie') AS cat_name,
+          COALESCE(fc.color,'#9ca3af') AS cat_color,
+          COALESCE(fc.icon,'💰') AS cat_icon,
+          SUM(ft.amount::numeric / GREATEST(COALESCE(ft.spread_months, 1), 1)) AS total
+        FROM finance_transactions ft,
+          generate_series(0, GREATEST(COALESCE(ft.spread_months, 1), 1) - 1) AS gs(mo)
         LEFT JOIN finance_categories fc ON ft.category_id = fc.id
-        WHERE ft.type IN ('expense','loan_payment') AND ft.date >= '${firstDate}'::date
+        WHERE ft.type IN ('expense','loan_payment')
+          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') >= '${firstYM}'
+          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') <= '${lastYM}'
         GROUP BY 1,2,3,4,5 ORDER BY 1, total DESC
       `),
       db.execute(`
