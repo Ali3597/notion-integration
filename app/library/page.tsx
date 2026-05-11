@@ -315,7 +315,7 @@ function Drawer({ open, onClose, children }: { open: boolean; onClose: () => voi
     <>
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 400 }} onClick={onClose} />
       <div style={{
-        position: "fixed", top: 0, right: 0, bottom: 0, width: 480, maxWidth: "95vw",
+        position: "fixed", top: "var(--topnav-height, 0px)", right: 0, bottom: 0, width: 480, maxWidth: "95vw",
         background: "var(--surface)", borderLeft: "1.5px solid var(--border)",
         boxShadow: "-8px 0 32px rgba(0,0,0,0.12)", zIndex: 401,
         display: "flex", flexDirection: "column", overflowY: "auto",

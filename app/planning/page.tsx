@@ -271,8 +271,6 @@ export default function PlanningPage() {
 
   return (
     <main style={s.main}>
-      <Link href="/" className="btn-back">← Accueil</Link>
-
       {/* Header */}
       <div style={s.header}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>

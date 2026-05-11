@@ -587,6 +587,12 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
 
   async function save() {
     const txType = form.type[0];
+
+    if ((txType === "income" || txType === "expense") && !form.account_id[0]) {
+      alert("Veuillez sélectionner un compte.");
+      return;
+    }
+
     let body: Record<string, unknown>;
 
     if (txType === "transfer" || txType === "loan_payment") {
@@ -803,9 +809,9 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
             </div>
             {showNewCat && <InlineCatForm name={newCatName} setName={setNewCatName} color={newCatColor} setColor={setNewCatColor} icon={newCatIcon} setIcon={setNewCatIcon} type={newCatType} setType={setNewCatType} onSave={saveNewCat} onCancel={() => setShowNewCat(false)} />}
           </Field>
-          <Field label="Compte">
-            <select style={selectStyle} value={form.account_id[0]} onChange={(e) => form.account_id[1](e.target.value)}>
-              <option value="">Aucun compte</option>
+          <Field label="Compte *">
+            <select style={{ ...selectStyle, borderColor: !form.account_id[0] ? "var(--red)" : undefined }} value={form.account_id[0]} onChange={(e) => form.account_id[1](e.target.value)}>
+              <option value="" disabled>Choisir un compte…</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.name} — {formatEur(a.current_balance)}</option>
               ))}
@@ -1011,9 +1017,10 @@ function MonthTab({ categories: initialCategories, accounts, onCategoryAdded }: 
 function AccountCard({ a, onEdit, onDelete }: { a: Account; onEdit: (a: Account) => void; onDelete: (id: string) => void }) {
   const isLoan = a.type === "loan";
   const bal = parseFloat(a.current_balance);
-  const balColor = isLoan ? (bal < 0 ? "var(--red)" : "var(--green)") : a.color;
-  const pctPaid = isLoan && parseFloat(a.initial_balance) !== 0
-    ? Math.max(0, Math.min(100, ((parseFloat(a.initial_balance) - bal) / Math.abs(parseFloat(a.initial_balance))) * 100))
+  const initial = parseFloat(a.initial_balance);
+  const balColor = isLoan ? (bal > 0 ? "var(--red)" : "var(--green)") : a.color;
+  const pctPaid = isLoan && initial > 0
+    ? Math.max(0, Math.min(100, ((initial - bal) / initial) * 100))
     : null;
 
   return (
@@ -1119,7 +1126,7 @@ function AccountsTab() {
   const loanAccounts = accounts.filter((a) => a.type === "loan");
   const totalAssets = assetAccounts.reduce((s, a) => s + parseFloat(a.current_balance ?? "0"), 0);
   const totalDebts = loanAccounts.reduce((s, a) => s + parseFloat(a.current_balance ?? "0"), 0);
-  const totalPatrimony = totalAssets + totalDebts;
+  const totalPatrimony = totalAssets - totalDebts;
 
   const accountFormJSX = (onClose: () => void) => (
     <>
@@ -1134,16 +1141,10 @@ function AccountsTab() {
           <option value="loan">Prêt / Dette</option>
         </select>
       </Field>
-      {form.type[0] === "loan" && (
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -10, marginBottom: 12, paddingLeft: 2, lineHeight: 1.5 }}>
-          Entrez un montant <strong>négatif</strong> pour représenter ce que vous devez encore.<br />
-          Ex : <span style={{ fontFamily: "var(--font-mono)" }}>-15000</span> pour un prêt de 15 000 €.
-        </div>
-      )}
       <Field label={form.type[0] === "loan" ? "Capital restant dû (€)" : "Solde de départ (€)"}>
-        <input style={inputStyle} type="number" step="0.01" value={form.initial_balance[0]}
+        <input style={inputStyle} type="number" step="0.01" min="0" value={form.initial_balance[0]}
           onChange={(e) => form.initial_balance[1](e.target.value)}
-          placeholder={form.type[0] === "loan" ? "-15000" : "0,00"} />
+          placeholder={form.type[0] === "loan" ? "15000" : "0,00"} />
       </Field>
       <Field label="Établissement">
         <input style={inputStyle} value={form.institution[0]} onChange={(e) => form.institution[1](e.target.value)} placeholder="ex. BNP, Boursorama, Fortuneo…" />
@@ -1534,7 +1535,8 @@ function StatsTab({ categories }: { categories: Category[]; accounts?: Account[]
     setPeriodLoading(true);
     fetch(`/api/finances/stats?months=${periodMonths}`)
       .then((r) => r.json())
-      .then((d) => { setPeriodData(d); setPeriodLoading(false); });
+      .then((d) => { setPeriodData(d?.error || !Array.isArray(d?.monthly) ? null : d); setPeriodLoading(false); })
+      .catch(() => setPeriodLoading(false));
   }, [periodMonths]);
 
   // Load month data on demand
@@ -1564,7 +1566,7 @@ function StatsTab({ categories }: { categories: Category[]; accounts?: Account[]
 
   // ── Computed: period view
   const periodSummary = useMemo(() => {
-    if (!periodData) return null;
+    if (!periodData || !Array.isArray(periodData.monthly)) return null;
     const { monthly, allCategoryExpenses } = periodData;
     const totalIncome = monthly.reduce((s, m) => s + m.income, 0);
     const totalExpense = monthly.reduce((s, m) => s + m.expense, 0);
@@ -1631,7 +1633,7 @@ function StatsTab({ categories }: { categories: Category[]; accounts?: Account[]
     if (!periodData) return null;
     const assets = periodData.accounts.filter((a) => a.type !== "loan").reduce((s, a) => s + a.current_balance, 0);
     const debts = periodData.accounts.filter((a) => a.type === "loan").reduce((s, a) => s + a.current_balance, 0);
-    return { assets, debts, net: assets + debts, hasLoans: debts < 0 };
+    return { assets, debts, net: assets - debts, hasLoans: debts > 0 };
   }, [periodData]);
 
   // ── Month view: projection

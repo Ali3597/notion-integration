@@ -692,7 +692,7 @@ const dp: Record<string, React.CSSProperties> = {
     background: "var(--surface)", border: "1.5px solid var(--border)",
     borderRadius: 16, boxShadow: "var(--shadow-md)",
     display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 160px)",
-    position: "sticky", top: 24,
+    position: "sticky", top: "calc(var(--topnav-height, 0px) + 24px)",
   },
   header: {
     display: "flex", alignItems: "center", justifyContent: "space-between",

@@ -5,10 +5,10 @@ import { eq } from "drizzle-orm";
 
 // Balance = initial_balance
 //   + income transactions on account
-//   - expense transactions on account
-//   - outgoing transfers / loan_payments from account
-//   + incoming transfers / loan_payments to account (reduces loan balance toward 0)
-//   + adjustments on account (signed delta, can be negative)
+//   - expense / transfer / loan_payment transactions from account
+//   + incoming transfers to account (adds to destination)
+//   - incoming loan_payments to account (reduces remaining debt toward 0)
+//   + adjustments on account (signed delta)
 const BALANCE_SQL = (alias = "a") => `
   ${alias}.initial_balance::numeric
   + COALESCE((
@@ -24,7 +24,11 @@ const BALANCE_SQL = (alias = "a") => `
     ), 0)
   + COALESCE((
       SELECT SUM(amount::numeric)
-      FROM finance_transactions WHERE to_account_id = ${alias}.id AND type IN ('transfer','loan_payment')
+      FROM finance_transactions WHERE to_account_id = ${alias}.id AND type = 'transfer'
+    ), 0)
+  - COALESCE((
+      SELECT SUM(amount::numeric)
+      FROM finance_transactions WHERE to_account_id = ${alias}.id AND type = 'loan_payment'
     ), 0)
 `;
 
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
       institution: institution ?? null,
       color: color ?? "#3b7ef8",
       initial_balance: initial_balance !== undefined && initial_balance !== ""
-        ? String(parseFloat(initial_balance).toFixed(2)) : "0",
+        ? String(Math.abs(parseFloat(initial_balance)).toFixed(2)) : "0",
     }).returning();
     return NextResponse.json(account, { status: 201 });
   } catch (error) {
@@ -79,7 +83,7 @@ export async function PATCH(request: Request) {
     if (body.color !== undefined) updates.color = body.color;
     if (body.initial_balance !== undefined)
       updates.initial_balance = body.initial_balance !== ""
-        ? String(parseFloat(body.initial_balance).toFixed(2)) : "0";
+        ? String(Math.abs(parseFloat(body.initial_balance)).toFixed(2)) : "0";
 
     const [updated] = await db.update(finance_accounts).set(updates).where(eq(finance_accounts.id, id)).returning();
     if (!updated) return NextResponse.json({ error: "Compte non trouvé" }, { status: 404 });

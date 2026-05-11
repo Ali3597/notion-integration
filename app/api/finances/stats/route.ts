@@ -32,14 +32,14 @@ export async function GET(request: Request) {
       // income + expense + loan_payment avec étalement budgétaire via generate_series
       db.execute(`
         SELECT
-          to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') AS month,
+          to_char((ft.date::date + gs.mo * interval '1 month'), 'YYYY-MM') AS month,
           CASE WHEN ft.type='loan_payment' THEN 'expense' ELSE ft.type END AS type,
           SUM(ft.amount::numeric / GREATEST(COALESCE(ft.spread_months, 1), 1)) AS total
         FROM finance_transactions ft,
           generate_series(0, GREATEST(COALESCE(ft.spread_months, 1), 1) - 1) AS gs(mo)
         WHERE ft.type IN ('income','expense','loan_payment')
-          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') >= '${firstYM}'
-          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') <= '${lastYM}'
+          AND to_char((ft.date::date + gs.mo * interval '1 month'), 'YYYY-MM') >= '${firstYM}'
+          AND to_char((ft.date::date + gs.mo * interval '1 month'), 'YYYY-MM') <= '${lastYM}'
         GROUP BY 1, 2
         ORDER BY 1
       `),
@@ -62,18 +62,18 @@ export async function GET(request: Request) {
       `),
       db.execute(`
         SELECT
-          to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') AS month,
+          to_char((ft.date::date + gs.mo * interval '1 month'), 'YYYY-MM') AS month,
           COALESCE(fc.id::text,'none') AS cat_id,
           COALESCE(fc.name,'Sans catégorie') AS cat_name,
           COALESCE(fc.color,'#9ca3af') AS cat_color,
           COALESCE(fc.icon,'💰') AS cat_icon,
           SUM(ft.amount::numeric / GREATEST(COALESCE(ft.spread_months, 1), 1)) AS total
-        FROM finance_transactions ft,
-          generate_series(0, GREATEST(COALESCE(ft.spread_months, 1), 1) - 1) AS gs(mo)
+        FROM finance_transactions ft
+        CROSS JOIN generate_series(0, GREATEST(COALESCE(ft.spread_months, 1), 1) - 1) AS gs(mo)
         LEFT JOIN finance_categories fc ON ft.category_id = fc.id
         WHERE ft.type IN ('expense','loan_payment')
-          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') >= '${firstYM}'
-          AND to_char((ft.date::date + (gs.mo || ' months')::interval), 'YYYY-MM') <= '${lastYM}'
+          AND to_char((ft.date::date + gs.mo * interval '1 month'), 'YYYY-MM') >= '${firstYM}'
+          AND to_char((ft.date::date + gs.mo * interval '1 month'), 'YYYY-MM') <= '${lastYM}'
         GROUP BY 1,2,3,4,5 ORDER BY 1, total DESC
       `),
       db.execute(`
@@ -160,10 +160,14 @@ export async function GET(request: Request) {
         else if (row.type === "adjustment") delta = amt; // signed
         deltas[row.account_id][row.date] = (deltas[row.account_id][row.date] ?? 0) + delta;
       }
-      // Impact on destination account (transfers + loan_payments)
-      if (row.to_account_id && (row.type === "transfer" || row.type === "loan_payment")) {
+      // Impact on destination account
+      if (row.to_account_id) {
         if (!deltas[row.to_account_id]) deltas[row.to_account_id] = {};
-        deltas[row.to_account_id][row.date] = (deltas[row.to_account_id][row.date] ?? 0) + amt;
+        if (row.type === "transfer") {
+          deltas[row.to_account_id][row.date] = (deltas[row.to_account_id][row.date] ?? 0) + amt;
+        } else if (row.type === "loan_payment") {
+          deltas[row.to_account_id][row.date] = (deltas[row.to_account_id][row.date] ?? 0) - amt;
+        }
       }
     }
 

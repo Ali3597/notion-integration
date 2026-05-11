@@ -861,7 +861,7 @@ function DayPanel({
       {/* Drawer */}
       <div style={{
         position: "fixed",
-        top: 0,
+        top: "var(--topnav-height, 0px)",
         right: 0,
         bottom: 0,
         width: 360,

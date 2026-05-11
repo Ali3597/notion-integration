@@ -8,6 +8,7 @@
 }
 
 :root {
+  --topnav-height: 0px;
   --bg: #f4f4fb;
   --surface: #ffffff;
   --surface2: #ededf7;
@@ -155,33 +156,45 @@ a[href]:hover {
   border-color: var(--accent) !important;
 }
 
-/* ── Home button (floating fixed) ── */
+/* ── Top navigation bar ── */
+
+body.has-topnav {
+  padding-top: 44px;
+  --topnav-height: 44px;
+}
+
+.top-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
 
 .home-btn {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 9998;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   color: var(--text-muted);
   text-decoration: none;
-  transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: color 0.15s, background 0.15s;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .home-btn:hover {
   color: var(--accent) !important;
-  background: rgba(59, 126, 248, 0.07) !important;
-  border-color: rgba(59, 126, 248, 0.35) !important;
-  box-shadow: 0 2px 12px rgba(59, 126, 248, 0.18) !important;
+  background: rgba(59, 126, 248, 0.08) !important;
   transform: none !important;
 }
 

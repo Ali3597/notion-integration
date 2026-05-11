@@ -105,6 +105,7 @@ export async function POST(request: Request) {
     } else {
       if (!description?.trim()) return NextResponse.json({ error: "La description est requise" }, { status: 400 });
       if (!amount || isNaN(parseFloat(amount))) return NextResponse.json({ error: "Le montant est requis" }, { status: 400 });
+      if (!account_id) return NextResponse.json({ error: "Un compte est requis" }, { status: 400 });
     }
 
     const parsedAmount = parseFloat(amount);

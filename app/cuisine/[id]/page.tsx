@@ -446,7 +446,7 @@ const styles: Record<string, React.CSSProperties> = {
   btnDelete: { padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "rgba(220,38,38,0.08)", color: "var(--red)", cursor: "pointer", border: "1.5px solid rgba(220,38,38,0.15)" },
   body: { display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, alignItems: "start" },
   sectionTitle: { fontSize: 13, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 14px" },
-  ingredientsCard: { background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 22px", boxShadow: "var(--shadow-sm)", position: "sticky", top: 20 },
+  ingredientsCard: { background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 22px", boxShadow: "var(--shadow-sm)", position: "sticky", top: "calc(var(--topnav-height, 0px) + 20px)" },
   ingredientRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border)" },
   ingredientBullet: { width: 5, height: 5, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 },
   ingredientName: { fontSize: 13, color: "var(--text)", flex: 1 },

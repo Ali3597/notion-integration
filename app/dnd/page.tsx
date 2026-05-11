@@ -1981,7 +1981,7 @@ function CompanionsTab({ companions, setCompanions }: {
         <>
           <div onClick={closeDrawer} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.28)", zIndex: 40 }} />
           <div style={{
-            position: "fixed", top: 0, right: 0, bottom: 0, width: 500,
+            position: "fixed", top: "var(--topnav-height, 0px)", right: 0, bottom: 0, width: 500,
             background: "var(--bg)", borderLeft: "1.5px solid var(--border)",
             zIndex: 50, overflowY: "auto", padding: "28px 28px 48px",
             display: "flex", flexDirection: "column", gap: 18,
